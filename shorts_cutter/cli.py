@@ -51,6 +51,22 @@ def main():
         help="Coverage mode: 'part' for viral highlights or 'full' for sequential chronological series (default: part)"
     )
     parser.add_argument(
+        "--elevenlabs-key", default=None,
+        help="ElevenLabs API key for AI voiceover / voice changing"
+    )
+    parser.add_argument(
+        "--voice-id", default=None,
+        help="ElevenLabs voice ID to replace video audio (e.g. 21m00Tcm4TlvDq8ikWAM for Rachel)"
+    )
+    parser.add_argument(
+        "--language", "-l", default=None,
+        help="Spoken language code for Whisper transcription (e.g. 'en', 'es', 'fr', 'vi', 'ja', default: auto-detect)"
+    )
+    parser.add_argument(
+        "--translate", action="store_true",
+        help="Translate foreign language speech into English subtitles and voiceover"
+    )
+    parser.add_argument(
         "--no-subtitles", action="store_true", help="Disable burning dynamic karaoke subtitles"
     )
     parser.add_argument(
@@ -79,6 +95,10 @@ def main():
         burn_subtitles=not args.no_subtitles,
         subtitles_font_size=args.font_size,
         coverage_mode=args.coverage,
+        language=args.language,
+        translate_to_english=args.translate,
+        elevenlabs_api_key=args.elevenlabs_key,
+        elevenlabs_voice_id=args.voice_id,
     )
 
     print("=" * 60)
@@ -86,6 +106,8 @@ def main():
     print(f"   Input:      {config.source_input}")
     print(f"   Mode:       {config.reframing_mode.value}")
     print(f"   Coverage:   {config.coverage_mode.upper()} ({'Sequential Full Video' if config.coverage_mode == 'full' else 'Viral Highlights'})")
+    if config.elevenlabs_voice_id:
+        print(f"   Voiceover:  ElevenLabs (voice_id: {config.elevenlabs_voice_id})")
     print(f"   Clips Max:  {config.max_clips} ({config.min_clip_duration}s - {config.max_clip_duration}s)")
     print(f"   Output Dir: {config.output_dir}")
     print("=" * 60)

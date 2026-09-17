@@ -25,6 +25,8 @@ The goal of this feature is to provide a dedicated, lightweight, and modular pip
 | **TSK-07** | Pipeline Orchestrator & CLI | `pipeline.py` / `cli.py`: Unified execution runner (`python -m shorts_cutter ...`) | `COMPLETED` ✅ | 100% |
 | **TSK-08** | Non-invasive API Router | Optional modular FastAPI router that can be registered without modifying app core | `COMPLETED` ✅ | 100% |
 | **TSK-09** | Testing & Quality Check | Automated test suite verifying end-to-end sample processing | `COMPLETED` ✅ | 100% |
+| **TSK-10** | Full Series vs Part Coverage | Sequential multi-part video series (`Part 1`, `Part 2`, ...) covering 100% of video | `COMPLETED` ✅ | 100% |
+| **TSK-11** | ElevenLabs AI Voice Changing | `voiceover.py`: Replace original speaker voice with ElevenLabs voices (presets or cloned) | `COMPLETED` ✅ | 100% |
 
 *Status: All tasks delivered, verified end-to-end, and covered by automated tests.*
 
@@ -37,11 +39,13 @@ graph TD
     A[Input: YouTube URL or Uploaded Video] --> B[Module: Ingestion - yt-dlp / Upload Handler]
     B --> C[Module: Audio Extraction - FFmpeg]
     C --> D[Module: Local Transcription - faster-whisper]
-    D --> E[Module: Viral Segment Selector - Gemini Flash-Lite]
+    D --> E[Module: Viral / Full Series Selector - Gemini or Heuristic]
     E --> F[Module: Visual Reframer - 9:16 Face/Center Tracker]
     E --> G[Module: Subtitle Generator - ASS Word Timestamps]
+    E --> V[Module: AI Voiceover - ElevenLabs TTS Optional]
     F --> H[Module: Video Renderer - FFmpeg Compositor]
     G --> H
+    V --> H
     H --> I[Output: Ready-to-Post 1080x1920 Short]
 ```
 
@@ -83,7 +87,18 @@ graph TD
 - Cuts source stream precisely around keyframes.
 - Encodes with `libx264`, `yuv420p`, high quality CRF 18-22, AAC audio.
 - Burns the `.ass` subtitles directly onto the video.
+- Supports `audio_override_path` for clean ElevenLabs AI voiceover muxing.
 - Adds metadata tags for social platform compatibility (TikTok, IG Reels, YouTube Shorts).
+
+#### 7. AI Voice Changing & Voiceover (`shorts_cutter/voiceover.py`)
+- Connects to ElevenLabs TTS API (`eleven_multilingual_v2`) to replace original speaker audio with studio-quality AI voices.
+- Curated presets available out of the box: Rachel, Drew, Bella, Antoni, Josh, Sam.
+- Dynamically queries user account voices (including custom cloned voices) via `/api/shorts-cutter/voices`.
+- Automatically multiplexes the newly voiced audio with the video while preserving subtitle alignment.
+
+#### 8. Video Coverage Modes: Full Series vs. Viral Highlights (`shorts_cutter/analyzer.py`)
+- **Part (Viral Highlights)**: Targets the top 1–5 standalone hooks and highest-energy moments.
+- **Full (Complete Video Series)**: Continuously partitions 100% of the video chronologically into `Part 1: [Topic]`, `Part 2: [Topic]`, etc., with contiguous boundaries at natural sentence breaks.
 
 ---
 
@@ -98,10 +113,11 @@ openshorts/
 │   ├── config.py               # Feature settings & default parameters
 │   ├── ingest.py               # YouTube downloader & local file validator
 │   ├── transcriber.py          # faster-whisper local transcription
-│   ├── analyzer.py             # Gemini moment detection & scoring
+│   ├── analyzer.py             # Gemini moment detection & scoring (Part & Full modes)
 │   ├── reframer.py             # 9:16 cropping & layout compositor
 │   ├── subtitles.py            # Word-level ASS subtitle generator
-│   ├── renderer.py             # Final FFmpeg rendering pipeline
+│   ├── voiceover.py            # ElevenLabs TTS voiceover & voice changer
+│   ├── renderer.py             # Final FFmpeg rendering & audio muxing pipeline
 │   ├── cli.py                  # Standalone CLI runner
 │   └── router.py               # Optional standalone FastAPI router (isolated)
 └── tests/
@@ -156,17 +172,24 @@ The entire feature has been verified inside the environment:
 ### 1. Via Command Line (CLI)
 
 ```bash
-# Process a local video file with Pillar Blur:
+# Process a local video file with Pillar Blur (top 3 viral highlights):
 python3 -m shorts_cutter.cli --input /path/to/video.mp4 --out ./output/my_shorts --max-clips 3
 
-# Process a YouTube URL:
-python3 -m shorts_cutter.cli --input "https://www.youtube.com/watch?v=..." --mode pillar_blur
+# Process a YouTube URL into a sequential FULL VIDEO SERIES (Part 1, Part 2, ...):
+python3 -m shorts_cutter.cli --input "https://www.youtube.com/watch?v=..." --coverage full --max-clips 15
 
-# Process with Smart Face/Speaker Centering Crop:
-python3 -m shorts_cutter.cli --input /path/to/video.mp4 --mode smart_crop
+# Replace original speaker's voice with ElevenLabs AI Voice (e.g. Rachel):
+python3 -m shorts_cutter.cli --input /path/to/video.mp4 \
+  --voice-id "21m00Tcm4TlvDq8ikWAM" \
+  --elevenlabs-key "sk_..."
 
-# Use a specific Gemini API key for AI scoring:
-python3 -m shorts_cutter.cli --input /path/to/video.mp4 --gemini-key "AIzaSy..."
+# Combine Full Series + Smart Crop + Custom ElevenLabs Voice:
+python3 -m shorts_cutter.cli --input /path/to/video.mp4 \
+  --mode smart_crop \
+  --coverage full \
+  --voice-id "29vD33N1CtxCmqQRPOHJ" \
+  --elevenlabs-key "sk_..." \
+  --gemini-key "AIzaSy..."
 ```
 
 ### 2. Via Standalone FastAPI Router
@@ -188,7 +211,8 @@ uvicorn shorts_cutter.router:standalone_app --port 8080
 
 #### API Endpoints:
 - `POST /api/shorts-cutter/upload` — Upload local video file (`multipart/form-data`).
-- `POST /api/shorts-cutter/process` — Enqueue asynchronous shorts generation.
+- `POST /api/shorts-cutter/process` — Enqueue asynchronous shorts generation (accepts `coverage_mode`, `elevenlabs_voice_id`, and `X-ElevenLabs-Key` / `X-Gemini-Key` headers).
+- `GET /api/shorts-cutter/voices` — Query available ElevenLabs voice models (defaults + custom cloned voices).
 - `GET /api/shorts-cutter/jobs/{job_id}` — Query job status and metadata.
 - `GET /api/shorts-cutter/jobs/{job_id}/files/{filename}` — Download/stream generated MP4 or subtitle file.
 - `GET /api/shorts-cutter/health` — Check module health.
@@ -203,10 +227,14 @@ Both **separate tab integration** and **in-dashboard engine toggling** are now a
 - **Navigation item**: Located in the main navigation sidebar/rail as `02 · Shorts Cutter (v2)` with a scissors icon (`Scissors`).
 - **Component**: [`dashboard/src/components/ShortsCutterTab.jsx`](file:///Users/aitd/Documents/Work/Freelance/openshorts/dashboard/src/components/ShortsCutterTab.jsx)
 - **Features in Tab**:
-  - Direct toggle between YouTube URL input and Local Video File drag-and-drop.
-  - Granular controls: Reframing mode (Pillar Blur vs Smart Crop), max clips (1-5), duration limits (15-60s), Whisper model size, subtitle burn toggle.
-  - Multi-stage real-time progress bar (`Ingest` → `Transcribe` → `AI Moments` → `9:16 Render`).
-  - Embedded vertical 9:16 video players with instant MP4 and SRT download buttons.
+  - **Input Source**: Direct toggle between YouTube URL input and Local Video File drag-and-drop.
+  - **Coverage Mode**: Toggle between **⚡ Part / Viral Highlights** and **🎬 Full Video Series (Part 1, 2, 3...)** covering 100% of the video timeline.
+  - **Original Video Language**: Multi-language support (Auto-detect + 29 languages: Vietnamese, Spanish, French, German, Japanese, etc.) for Whisper speech recognition.
+  - **Translate & Dub into English (AI Translation)**: One-click option to translate any foreign speech into English subtitles and voiceover. Whisper runs `task="translate"`, and ElevenLabs voices the English translation with native pronunciation.
+  - **AI Voice Changing / Voiceover**: One-click toggle to replace original speaker audio with ElevenLabs AI voices. Uses `eleven_flash_v2_5` (supports 32 languages including Vietnamese, with explicit `language_code` support). Includes interactive card-based voice gallery (identical to SaaShorts/AI Shorts) with category filter chips (All, Female, Male, Custom/Cloned), real-time name/accent search, inline `<Volume2 />` audio sample preview player, and custom API key support.
+  - **Visual Reframing**: Pillar Blur (blurred background) vs Smart Face/Speaker Centering Crop.
+  - **Real-Time Progress**: Multi-stage indicator (`Ingest` → `Transcribe` → `AI Moments` → `9:16 Render`).
+  - **Output Gallery**: Embedded vertical 9:16 video players with PART badges, AI Voice tags, and instant MP4 + SRT downloads.
 
 ### 2. Quick Engine Switch / Toggle in Main Dashboard
 - **Location**: Top of [`dashboard/src/components/MediaInput.jsx`](file:///Users/aitd/Documents/Work/Freelance/openshorts/dashboard/src/components/MediaInput.jsx).

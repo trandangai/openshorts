@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from shorts_cutter.config import JobConfig, ReframingMode
 from shorts_cutter.pipeline import run_pipeline
+from shorts_cutter.voiceover import get_elevenlabs_voices
 
 router = APIRouter(prefix="/api/shorts-cutter", tags=["Shorts Cutter"])
 
@@ -31,6 +32,9 @@ class ProcessRequest(BaseModel):
     burn_subtitles: bool = Field(default=True, description="Burn word-highlighted subtitles")
     whisper_model_size: str = Field(default="base", description="faster-whisper model: tiny, base, small")
     gemini_model: str = Field(default="gemini-2.0-flash")
+    language: Optional[str] = Field(default=None, description="Spoken language code (e.g. 'en', 'es', 'fr', 'vi', 'auto')")
+    translate_to_english: bool = Field(default=False, description="Translate foreign speech into English subtitles & voiceover")
+    elevenlabs_voice_id: Optional[str] = Field(default=None, description="Optional ElevenLabs voice ID to replace audio")
 
 
 def _run_background_job(job_id: str, config: JobConfig):
@@ -48,6 +52,14 @@ def _run_background_job(job_id: str, config: JobConfig):
 def health_check():
     """Health check endpoint for shorts_cutter module."""
     return {"status": "ok", "service": "shorts_cutter", "version": "1.0.0"}
+
+
+@router.get("/voices")
+def list_voices(x_elevenlabs_key: Optional[str] = Header(None, alias="X-ElevenLabs-Key")):
+    """List available ElevenLabs voices (presets or live from user account)."""
+    key = x_elevenlabs_key or os.environ.get("ELEVENLABS_API_KEY")
+    voices = get_elevenlabs_voices(key)
+    return {"voices": voices, "source": "elevenlabs" if key else "defaults"}
 
 
 @router.post("/upload")
@@ -74,6 +86,7 @@ async def start_shorts_job(
     req: ProcessRequest,
     background_tasks: BackgroundTasks,
     x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
+    x_elevenlabs_key: Optional[str] = Header(None, alias="X-ElevenLabs-Key"),
 ):
     """
     Start cutting shorts from a YouTube URL or video file asynchronously.
@@ -94,6 +107,10 @@ async def start_shorts_job(
         reframing_mode=mode,
         burn_subtitles=req.burn_subtitles,
         coverage_mode=req.coverage_mode,
+        language=req.language,
+        translate_to_english=req.translate_to_english,
+        elevenlabs_api_key=x_elevenlabs_key or os.environ.get("ELEVENLABS_API_KEY"),
+        elevenlabs_voice_id=req.elevenlabs_voice_id,
     )
 
     JOBS_STORE[job_id] = {
@@ -101,6 +118,7 @@ async def start_shorts_job(
         "status": "QUEUED",
         "input_source": req.input_source,
         "coverage_mode": req.coverage_mode,
+        "elevenlabs_voice_id": req.elevenlabs_voice_id,
         "created_at": asyncio.get_event_loop().time(),
     }
 

@@ -41,6 +41,7 @@ def transcribe_video(
     job_dir: str,
     model_size: str = "base",
     language: Optional[str] = None,
+    task: str = "transcribe",
     device: Optional[str] = None,
     compute_type: Optional[str] = None,
 ) -> Transcript:
@@ -97,17 +98,18 @@ def transcribe_video(
     print(f"[shorts_cutter:transcribe] Loading faster-whisper model '{model_size}' on {device} ({compute_type})...")
     model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
-    print(f"[shorts_cutter:transcribe] Transcribing with word timestamps...")
+    print(f"[shorts_cutter:transcribe] Transcribing with word timestamps (task={task})...")
     whisper_segments, info = model.transcribe(
         wav_path,
         beam_size=5,
         word_timestamps=True,
         language=language,
+        task=task,
         vad_filter=True,
         vad_parameters=dict(min_silence_duration_ms=500),
     )
 
-    detected_lang = info.language
+    detected_lang = "en" if task == "translate" else info.language
     segments_list = []
     full_text_parts = []
     seg_id = 0

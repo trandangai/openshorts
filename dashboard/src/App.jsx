@@ -1549,7 +1549,7 @@ function App() {
 
           {/* View: Shorts Cutter v2 */}
           {activeTab === 'shorts-cutter' && (
-            <ShortsCutterTab geminiApiKey={apiKey} />
+            <ShortsCutterTab geminiApiKey={apiKey} elevenLabsApiKey={elevenLabsKey} />
           )}
 
           {/* View: SaaS Shorts */}

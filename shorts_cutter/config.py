@@ -106,7 +106,13 @@ class JobConfig:
     subtitles_font_size: int = 24
     subtitles_highlight_color: str = "&H00D6FF"  # Yellow BGR (&H00D6FF)
     coverage_mode: str = "part"  # "part" (highlights) or "full" (sequential full video series)
+    language: Optional[str] = None  # None / "auto" = auto-detect, or ISO-639-1 code (e.g. "en", "es", "vi", "fr")
+    translate_to_english: bool = False  # True = translate foreign audio to English subtitles & voiceover
+    elevenlabs_api_key: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None  # None = keep original audio, or specify voice_id to dub/voiceover
 
     def __post_init__(self):
         if not self.gemini_api_key:
             self.gemini_api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not self.elevenlabs_api_key:
+            self.elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY")

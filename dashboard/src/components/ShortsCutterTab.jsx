@@ -15,10 +15,16 @@ import {
   FileText,
   Clock,
   RotateCcw,
+  Mic,
+  Volume2,
+  VolumeX,
+  Check,
+  Search,
+  Globe,
 } from 'lucide-react';
 import { getApiUrl } from '../config';
 
-export default function ShortsCutterTab({ geminiApiKey = '' }) {
+export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = '' }) {
   const [inputType, setInputType] = useState('url'); // 'url' | 'file'
   const [url, setUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -32,7 +38,71 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
   const [maxDuration, setMaxDuration] = useState(60);
   const [burnSubtitles, setBurnSubtitles] = useState(true);
   const [whisperModel, setWhisperModel] = useState('base');
+  const [language, setLanguage] = useState('auto'); // 'auto' | 'en' | 'es' | 'fr' | etc.
+  const [translateToEnglish, setTranslateToEnglish] = useState(false);
   const [customGeminiKey, setCustomGeminiKey] = useState(geminiApiKey || '');
+
+  // ElevenLabs Voiceover Settings
+  const [enableVoiceover, setEnableVoiceover] = useState(false);
+  const [selectedVoiceId, setSelectedVoiceId] = useState('21m00Tcm4TlvDq8ikWAM'); // Rachel default
+  const [customElevenLabsKey, setCustomElevenLabsKey] = useState(
+    () => elevenLabsApiKey || localStorage.getItem('elevenLabsKey_v1') || ''
+  );
+  const [voiceCategoryFilter, setVoiceCategoryFilter] = useState('all'); // 'all' | 'female' | 'male' | 'custom'
+  const [voiceSearchQuery, setVoiceSearchQuery] = useState('');
+  const [voices, setVoices] = useState([
+    {
+      voice_id: '21m00Tcm4TlvDq8ikWAM',
+      name: 'Rachel',
+      category: 'premade',
+      labels: { gender: 'female', accent: 'american', description: 'calm & natural' },
+      preview_url: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/21m00Tcm4TlvDq8ikWAM/df6788f9-1965-4d70-b790-b33f395f6f3d.mp3',
+    },
+    {
+      voice_id: '29vD33N1CtxCmqQRPOHJ',
+      name: 'Drew',
+      category: 'premade',
+      labels: { gender: 'male', accent: 'american', description: 'confident & energetic' },
+      preview_url: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/29vD33N1CtxCmqQRPOHJ/e8b52a3f-9732-440f-b78a-16d5d1e8f829.mp3',
+    },
+    {
+      voice_id: 'EXAVITQu4vr4xnSDxMaL',
+      name: 'Bella',
+      category: 'premade',
+      labels: { gender: 'female', accent: 'american', description: 'soft & expressive' },
+      preview_url: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/04365860-244e-4f51-a9f8-7448d7c86510.mp3',
+    },
+    {
+      voice_id: 'ErXwobaYiN019PkySvjV',
+      name: 'Antoni',
+      category: 'premade',
+      labels: { gender: 'male', accent: 'american', description: 'warm storyteller' },
+      preview_url: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/ErXwobaYiN019PkySvjV/38d8f367-73e0-4729-844c-1aa16bc60fb7.mp3',
+    },
+    {
+      voice_id: 'TxGEqnHWrfWFTfGW9XjX',
+      name: 'Josh',
+      category: 'premade',
+      labels: { gender: 'male', accent: 'american', description: 'deep & authoritative' },
+      preview_url: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/TxGEqnHWrfWFTfGW9XjX/4859a857-7977-4b78-b118-8be06c7104b2.mp3',
+    },
+    {
+      voice_id: 'yoZ06aMxZJJ28mfd3POQ',
+      name: 'Sam',
+      category: 'premade',
+      labels: { gender: 'male', accent: 'american', description: 'dynamic & raspy' },
+      preview_url: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/yoZ06aMxZJJ28mfd3POQ/1c4d417c-3411-426f-8d62-0e5503295013.mp3',
+    },
+  ]);
+  const [playingPreview, setPlayingPreview] = useState(null);
+  const audioPreviewRef = useRef(null);
+
+  // Sync elevenLabsApiKey from props if changed
+  useEffect(() => {
+    if (elevenLabsApiKey && !customElevenLabsKey) {
+      setCustomElevenLabsKey(elevenLabsApiKey);
+    }
+  }, [elevenLabsApiKey]);
 
   // Job Execution State
   const [jobId, setJobId] = useState(null);
@@ -43,6 +113,49 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
 
   const timerRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Fetch available ElevenLabs voices on mount or key change
+  useEffect(() => {
+    const fetchVoices = async () => {
+      try {
+        const headers = {};
+        if (customElevenLabsKey.trim()) {
+          headers['X-ElevenLabs-Key'] = customElevenLabsKey.trim();
+        }
+        const res = await fetch(getApiUrl('/api/shorts-cutter/voices'), { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.voices && data.voices.length > 0) {
+            setVoices(data.voices);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load ElevenLabs voices:', err);
+      }
+    };
+    fetchVoices();
+  }, [customElevenLabsKey]);
+
+  // Audio preview toggle
+  const handleTogglePreview = (previewUrl) => {
+    if (!previewUrl) return;
+    if (playingPreview === previewUrl) {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+      }
+      setPlayingPreview(null);
+    } else {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+      }
+      const audio = new Audio(previewUrl);
+      audio.onended = () => setPlayingPreview(null);
+      audio.onerror = () => setPlayingPreview(null);
+      audio.play().catch(() => setPlayingPreview(null));
+      audioPreviewRef.current = audio;
+      setPlayingPreview(previewUrl);
+    }
+  };
 
   // Poll job status
   useEffect(() => {
@@ -121,6 +234,9 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
       if (customGeminiKey.trim()) {
         headers['X-Gemini-Key'] = customGeminiKey.trim();
       }
+      if (enableVoiceover && customElevenLabsKey.trim()) {
+        headers['X-ElevenLabs-Key'] = customElevenLabsKey.trim();
+      }
 
       const res = await fetch(getApiUrl('/api/shorts-cutter/process'), {
         method: 'POST',
@@ -134,6 +250,9 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
           reframing_mode: reframingMode,
           burn_subtitles: burnSubtitles,
           whisper_model_size: whisperModel,
+          language: language !== 'auto' ? language : null,
+          translate_to_english: translateToEnglish,
+          elevenlabs_voice_id: enableVoiceover ? selectedVoiceId : null,
         }),
       });
 
@@ -276,9 +395,16 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
                               )}
                               <span className="truncate">{clip.title}</span>
                             </h5>
-                            <span className="shrink-0 text-[11px] font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">
-                              {clip.virality_score}%
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {clip.voice_id && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ok/15 text-ok border border-ok/20 font-medium flex items-center gap-1">
+                                  <Mic size={10} /> AI Voice
+                                </span>
+                              )}
+                              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">
+                                {clip.virality_score}%
+                              </span>
+                            </div>
                           </div>
                           {clip.hook && (
                             <p className="text-xs text-muted italic line-clamp-2">
@@ -567,9 +693,43 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
                   <option value="small">Small (Higher accuracy for accents)</option>
                 </select>
               </div>
+
+              {/* Spoken Video Language */}
+              <div className="space-y-2">
+                <label className="text-xs font-mono uppercase tracking-wider text-muted flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Globe size={13} className="text-accent" /> Original Video Language
+                  </span>
+                  <span className="text-[10px] font-mono text-accent">Source Audio</span>
+                </label>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="w-full px-3 py-2 rounded-input bg-paper border border-rule text-ink text-sm focus:outline-none focus:border-accent"
+                >
+                  <option value="auto">🌐 Auto-Detect Language (Default)</option>
+                  <option value="en">English (en)</option>
+                  <option value="es">Spanish / Español (es)</option>
+                  <option value="fr">French / Français (fr)</option>
+                  <option value="de">German / Deutsch (de)</option>
+                  <option value="it">Italian / Italiano (it)</option>
+                  <option value="pt">Portuguese / Português (pt)</option>
+                  <option value="vi">Vietnamese / Tiếng Việt (vi)</option>
+                  <option value="ja">Japanese / 日本語 (ja)</option>
+                  <option value="zh">Chinese / 中文 (zh)</option>
+                  <option value="ko">Korean / 한국어 (ko)</option>
+                  <option value="hi">Hindi / हिन्दी (hi)</option>
+                  <option value="ru">Russian / Русский (ru)</option>
+                  <option value="ar">Arabic / العربية (ar)</option>
+                  <option value="nl">Dutch / Nederlands (nl)</option>
+                  <option value="tr">Turkish / Türkçe (tr)</option>
+                  <option value="id">Indonesian / Bahasa (id)</option>
+                  <option value="pl">Polish / Polski (pl)</option>
+                </select>
+              </div>
             </div>
 
-            {/* Subtitles & Gemini Key */}
+            {/* Subtitles, Translation & Gemini Key */}
             <div className="space-y-4 pt-2 border-t border-rule">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -581,6 +741,27 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
                 <span className="text-sm font-medium text-ink flex items-center gap-1.5">
                   <Subtitles size={14} className="text-accent" /> Burn Dynamic Karaoke Subtitles (Word Highlight)
                 </span>
+              </label>
+
+              {/* Translate & Dub into English Toggle */}
+              <label className="flex items-center justify-between p-3 rounded-input bg-paper border border-rule cursor-pointer hover:border-accent/40 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-base">🌐 ➔ 🇬🇧</span>
+                  <div>
+                    <span className="text-sm font-medium text-ink block">
+                      Translate & Dub into English (AI Translation)
+                    </span>
+                    <span className="text-xs text-muted block">
+                      Translates foreign speech (e.g. Vietnamese, Spanish) into English subtitles & English ElevenLabs voice.
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={translateToEnglish}
+                  onChange={(e) => setTranslateToEnglish(e.target.checked)}
+                  className="w-4 h-4 rounded text-accent focus:ring-accent accent-[#e5a93c]"
+                />
               </label>
 
               <div className="space-y-1.5">
@@ -595,6 +776,210 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
                   className="w-full px-3 py-2 rounded-input bg-paper border border-rule text-ink placeholder:text-muted/50 text-sm focus:outline-none focus:border-accent"
                 />
               </div>
+            </div>
+
+            {/* AI Voice Changing / Voiceover (ElevenLabs) */}
+            <div className="space-y-3 pt-4 border-t border-rule">
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm font-medium text-ink flex items-center gap-2">
+                  <Mic size={15} className="text-accent" /> Replace Original Speaker Voice with ElevenLabs AI
+                </span>
+                <input
+                  type="checkbox"
+                  checked={enableVoiceover}
+                  onChange={(e) => setEnableVoiceover(e.target.checked)}
+                  className="w-4 h-4 rounded text-accent focus:ring-accent accent-[#e5a93c]"
+                />
+              </label>
+
+              {enableVoiceover && (
+                <div className="p-4 rounded-input bg-paper border border-rule space-y-4 animate-fade">
+                  {/* Multilingual / Translation Engine Notice */}
+                  <div className="p-3 rounded-input bg-paper2 border border-rule flex items-start gap-3">
+                    <Globe size={16} className="text-accent shrink-0 mt-0.5" />
+                    <div className="text-xs text-ink leading-relaxed">
+                      <div className="font-medium text-accent flex items-center gap-1.5 mb-0.5">
+                        {translateToEnglish ? '🇬🇧 English Translation & Dubbing Active' : '🌐 Multilingual AI Voice Model (32 Languages)'}
+                      </div>
+                      <p className="text-muted text-[11px]">
+                        {translateToEnglish ? (
+                          <>
+                            Whisper will automatically translate foreign speech into <strong className="text-ink">English text & subtitles</strong>. Your selected ElevenLabs voice will speak the <strong className="text-ink">English translation</strong> with natural pronunciation.
+                          </>
+                        ) : (
+                          <>
+                            Demo sample buttons (<Volume2 size={11} className="inline text-accent" />) play English voice previews. The AI model (<code className="font-mono text-[10px] text-accent">eleven_flash_v2_5</code>) automatically speaks in{' '}
+                            <strong className="text-ink">
+                              {language === 'auto' ? "your video's detected language" : `your selected language (${language.toUpperCase()})`}
+                            </strong>{' '}
+                            with the chosen actor's pitch and style.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Voice Selector Header + Filter Controls */}
+                  {(() => {
+                    const filteredVoices = voices.filter((v) => {
+                      const gender = (v.labels?.gender || '').toLowerCase();
+                      const category = (v.category || '').toLowerCase();
+                      if (voiceCategoryFilter === 'female' && gender !== 'female') return false;
+                      if (voiceCategoryFilter === 'male' && gender !== 'male') return false;
+                      if (voiceCategoryFilter === 'custom' && category === 'premade') return false;
+                      if (voiceSearchQuery.trim()) {
+                        const q = voiceSearchQuery.toLowerCase();
+                        const matchName = v.name?.toLowerCase().includes(q);
+                        const matchAccent = v.labels?.accent?.toLowerCase().includes(q);
+                        const matchDesc = v.labels?.description?.toLowerCase().includes(q);
+                        if (!matchName && !matchAccent && !matchDesc) return false;
+                      }
+                      return true;
+                    });
+
+                    return (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-mono uppercase tracking-wider text-muted">
+                            Select Voice Model ({voices.length} available)
+                          </label>
+                          <span className="text-[11px] font-mono text-muted">
+                            {filteredVoices.length} shown
+                          </span>
+                        </div>
+
+                        {/* Filter Tabs & Search */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center bg-paper2 rounded-input border border-rule p-0.5">
+                            {['all', 'female', 'male', 'custom'].map((cat) => (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => setVoiceCategoryFilter(cat)}
+                                className={`px-2.5 py-1 text-xs rounded-sm capitalize transition-colors ${
+                                  voiceCategoryFilter === cat
+                                    ? 'bg-paper3 text-accent font-medium shadow-sm'
+                                    : 'text-muted hover:text-ink'
+                                }`}
+                              >
+                                {cat}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="relative flex-1 min-w-[140px]">
+                            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                            <input
+                              type="text"
+                              placeholder="Search voice..."
+                              value={voiceSearchQuery}
+                              onChange={(e) => setVoiceSearchQuery(e.target.value)}
+                              className="w-full pl-8 pr-2.5 py-1 text-xs rounded-input bg-paper2 border border-rule text-ink placeholder:text-muted/50 focus:outline-none focus:border-accent"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Interactive Voice Cards List */}
+                        <div className="space-y-1.5 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                          {filteredVoices.length === 0 ? (
+                            <div className="py-6 text-center text-xs text-muted border border-dashed border-rule rounded-input">
+                              No voices found matching "{voiceSearchQuery || voiceCategoryFilter}"
+                            </div>
+                          ) : (
+                            filteredVoices.map((v) => {
+                              const isSelected = selectedVoiceId === v.voice_id;
+                              const isPlaying = playingPreview === v.preview_url;
+                              return (
+                                <button
+                                  key={v.voice_id}
+                                  type="button"
+                                  onClick={() => setSelectedVoiceId(v.voice_id)}
+                                  className={`w-full flex items-center gap-3 p-2.5 rounded-input border text-left transition-colors duration-200 ${
+                                    isSelected
+                                      ? 'border-accent bg-paper3'
+                                      : 'border-rule bg-paper hover:bg-paper3'
+                                  }`}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-sm truncate font-medium ${isSelected ? 'text-ink' : 'text-ink2'}`}>
+                                        {v.name}
+                                      </span>
+                                      {v.category && v.category !== 'premade' && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent font-mono">
+                                          {v.category}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[11px] text-muted mt-0.5 capitalize">
+                                      {v.labels?.accent || 'natural'} {v.labels?.gender ? `· ${v.labels.gender}` : ''}{' '}
+                                      {v.labels?.description ? `· ${v.labels.description}` : ''}
+                                    </div>
+                                  </div>
+
+                                  {/* Preview Button */}
+                                  {v.preview_url && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleTogglePreview(v.preview_url);
+                                      }}
+                                      className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                                        isPlaying
+                                          ? 'bg-accent text-paper animate-pulse'
+                                          : 'bg-paper2 text-muted hover:text-accent hover:bg-paper3'
+                                      }`}
+                                      title={isPlaying ? 'Pause preview' : 'Play voice sample'}
+                                    >
+                                      {isPlaying ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                                    </button>
+                                  )}
+
+                                  {/* Selected Checkmark */}
+                                  {isSelected && <Check size={15} className="text-accent shrink-0" />}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <p className="text-[11px] text-muted">
+                          Whisper transcribes words in {language === 'auto' ? 'auto-detected language' : language.toUpperCase()}; ElevenLabs re-voices each short in that language with natural pacing.
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ElevenLabs API Key */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono uppercase tracking-wider text-muted">
+                      ElevenLabs API Key
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="sk_... (or xi-api-key)"
+                      value={customElevenLabsKey}
+                      onChange={(e) => {
+                        setCustomElevenLabsKey(e.target.value);
+                        localStorage.setItem('elevenLabsKey_v1', e.target.value);
+                      }}
+                      className="w-full px-3 py-2 rounded-input bg-paper2 border border-rule text-ink placeholder:text-muted/50 text-sm focus:outline-none focus:border-accent"
+                    />
+                    <p className="text-[11px] text-muted">
+                      Saved locally in your browser. Get your free API key at{' '}
+                      <a
+                        href="https://elevenlabs.io"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-accent underline hover:opacity-80"
+                      >
+                        elevenlabs.io
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Submit Button */}

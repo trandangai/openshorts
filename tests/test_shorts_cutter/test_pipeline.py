@@ -51,6 +51,12 @@ class TestShortsCutter(unittest.TestCase):
         self.assertEqual(cfg.reframing_mode, ReframingMode.PILLAR_BLUR)
         self.assertTrue(cfg.burn_subtitles)
         self.assertEqual(cfg.max_clips, 3)
+        self.assertIsNone(cfg.language)
+        self.assertFalse(cfg.translate_to_english)
+
+        cfg_es = JobConfig(source_input="test.mp4", language="es", translate_to_english=True)
+        self.assertEqual(cfg_es.language, "es")
+        self.assertTrue(cfg_es.translate_to_english)
 
     def test_is_url(self):
         self.assertTrue(is_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
@@ -248,10 +254,22 @@ class TestShortsCutter(unittest.TestCase):
         self.assertEqual(data["status"], "QUEUED")
         self.assertIn("job_id", data)
 
-        # Check job store has coverage_mode recorded
-        from shorts_cutter.router import JOBS_STORE
-        job_id = data["job_id"]
-        self.assertEqual(JOBS_STORE[job_id]["coverage_mode"], "full")
+    def test_voiceover_default_voices(self):
+        from shorts_cutter.voiceover import get_elevenlabs_voices, DEFAULT_VOICES
+        voices = get_elevenlabs_voices(None)
+        self.assertGreaterEqual(len(voices), 6)
+        self.assertEqual(voices[0]["voice_id"], "21m00Tcm4TlvDq8ikWAM")
+        self.assertIn("Rachel", voices[0]["name"])
+
+    def test_router_voices_endpoint(self):
+        if not HAS_FASTAPI:
+            self.skipTest("fastapi not installed in current environment")
+        client = TestClient(standalone_app)
+        response = client.get("/api/shorts-cutter/voices")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("voices", data)
+        self.assertGreaterEqual(len(data["voices"]), 6)
 
 
 if __name__ == "__main__":

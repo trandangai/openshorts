@@ -23,6 +23,7 @@ def render_clip(
     moment: ViralMoment,
     output_mp4_path: str,
     subtitles_ass_path: Optional[str] = None,
+    audio_override_path: Optional[str] = None,
     reframing_mode: ReframingMode = ReframingMode.PILLAR_BLUR,
     target_width: int = 1080,
     target_height: int = 1920,
@@ -31,6 +32,7 @@ def render_clip(
 ) -> str:
     """
     Renders a single vertical Short from source video.
+    Optionally replaces original audio with audio_override_path (e.g. ElevenLabs voiceover).
     """
     os.makedirs(os.path.dirname(os.path.abspath(output_mp4_path)), exist_ok=True)
 
@@ -67,6 +69,12 @@ def render_clip(
         full_filter = reframer_filter
         map_video = "[outv]" if "[outv]" in reframer_filter else "0:v"
 
+    has_audio_override = bool(
+        audio_override_path
+        and os.path.exists(audio_override_path)
+        and os.path.getsize(audio_override_path) > 0
+    )
+
     # Assemble FFmpeg command
     cmd = [
         "ffmpeg",
@@ -74,9 +82,14 @@ def render_clip(
         "-ss", f"{moment.start:.3f}",
         "-t", f"{moment.duration:.3f}",
         "-i", source_video,
+    ]
+    if has_audio_override:
+        cmd.extend(["-i", audio_override_path])
+
+    cmd.extend([
         "-filter_complex", full_filter,
         "-map", map_video,
-        "-map", "0:a?",
+        "-map", "1:a:0" if has_audio_override else "0:a?",
         "-c:v", "libx264",
         "-preset", preset,
         "-crf", str(crf),
@@ -84,9 +97,10 @@ def render_clip(
         "-c:a", "aac",
         "-b:a", "192k",
         "-ar", "44100",
+        "-shortest",
         "-movflags", "+faststart",
         output_mp4_path,
-    ]
+    ])
 
     print(f"[shorts_cutter:renderer] Rendering Short #{moment.id}: '{moment.title}' ({moment.duration:.1f}s)...")
     res = subprocess.run(cmd, capture_output=True, text=True)
