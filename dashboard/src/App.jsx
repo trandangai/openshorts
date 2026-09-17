@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Upload, Sparkles, Youtube, Instagram, Share2, ChevronDown, Check, Activity, LayoutDashboard, Settings, Plus, History, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, Mail, Loader2, Download, Menu, Lock } from 'lucide-react';
+import { Upload, Sparkles, Youtube, Instagram, Share2, ChevronDown, Check, Activity, LayoutDashboard, Settings, Plus, History, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, Mail, Loader2, Download, Menu, Lock, Scissors } from 'lucide-react';
 import KeyInput from './components/KeyInput';
 import MediaInput from './components/MediaInput';
 import McpConnectCard from './components/McpConnectCard';
@@ -8,6 +8,7 @@ import ProcessingAnimation from './components/ProcessingAnimation';
 // import Gallery from './components/Gallery';
 import ThumbnailStudio from './components/ThumbnailStudio';
 import SaaShortsTab from './components/SaaShortsTab';
+import ShortsCutterTab from './components/ShortsCutterTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
 import ClipEditor from './components/ClipEditor';
@@ -956,12 +957,13 @@ function App() {
   // wraps to two lines in a 5-up bar on a 360px phone.
   const navItems = [
     { id: 'dashboard', ord: '01', icon: LayoutDashboard, label: 'Clip Generator', short: 'clips', primary: true },
-    { id: 'saasshorts', ord: '02', icon: Sparkles, label: 'AI Shorts', short: 'ai shorts', byok: true, primary: true },
-    { id: 'ai-agent', ord: '03', icon: Bot, label: 'AI Agent', short: 'agent', byok: true },
-    { id: 'ugc-gallery', ord: '04', icon: LayoutGrid, label: 'UGC Gallery', short: 'gallery', primary: true },
-    { id: 'thumbnails', ord: '05', icon: Image, label: 'YouTube Studio', short: 'studio', primary: true },
-    ...(billingEnabled && isSignedIn ? [{ id: 'history', ord: '06', icon: History, label: 'History', short: 'history' }] : []),
-    { id: 'settings', ord: '07', icon: Settings, label: 'Settings', short: 'settings' },
+    { id: 'shorts-cutter', ord: '02', icon: Scissors, label: 'Shorts Cutter (v2)', short: 'cutter', primary: true },
+    { id: 'saasshorts', ord: '03', icon: Sparkles, label: 'AI Shorts', short: 'ai shorts', byok: true, primary: true },
+    { id: 'ai-agent', ord: '04', icon: Bot, label: 'AI Agent', short: 'agent', byok: true },
+    { id: 'ugc-gallery', ord: '05', icon: LayoutGrid, label: 'UGC Gallery', short: 'gallery', primary: true },
+    { id: 'thumbnails', ord: '06', icon: Image, label: 'YouTube Studio', short: 'studio', primary: true },
+    ...(billingEnabled && isSignedIn ? [{ id: 'history', ord: '07', icon: History, label: 'History', short: 'history' }] : []),
+    { id: 'settings', ord: '08', icon: Settings, label: 'Settings', short: 'settings' },
   ];
   const activeNav = navItems.find((n) => n.id === activeTab);
 
@@ -1545,6 +1547,11 @@ function App() {
             </div>
           )}
 
+          {/* View: Shorts Cutter v2 */}
+          {activeTab === 'shorts-cutter' && (
+            <ShortsCutterTab geminiApiKey={apiKey} />
+          )}
+
           {/* View: SaaS Shorts */}
           {activeTab === 'saasshorts' && (
             <SaaShortsTab geminiApiKey={apiKey} elevenLabsKey={elevenLabsKey} falKey={falKey} uploadPostKey={uploadPostKey} uploadUserId={uploadUserId} managed={isManaged} />
@@ -1736,7 +1743,11 @@ function App() {
                   )}
                 </div>
 
-                <MediaInput onProcess={handleProcess} isProcessing={status === 'processing'} />
+                <MediaInput
+                  onProcess={handleProcess}
+                  isProcessing={status === 'processing'}
+                  onSwitchToShortsCutter={() => setActiveTab('shorts-cutter')}
+                />
 
                 <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-muted text-xs sm:text-sm">
                   <span className="flex items-center gap-2"><Youtube size={16} /> YouTube</span>

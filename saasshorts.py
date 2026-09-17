@@ -42,6 +42,35 @@ DEFAULT_VOICES = {
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL_SAAS") or os.environ.get("GEMINI_MODEL") or "gemini-3.1-flash-lite"
 
 
+def _parse_json_from_llm(raw: str, expected_type=dict):
+    """Safely extract and parse JSON from LLM output, handling markdown blocks and trailing extra data."""
+    if not raw:
+        return None
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+        text = text.strip()
+
+    start_char = "{" if expected_type is dict else "["
+    start = text.find(start_char)
+    if start != -1:
+        # Try raw_decode from the opening bracket to parse the first complete JSON object/array
+        # ignoring any trailing commentary or secondary blocks that cause 'Extra data' errors.
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(text[start:])
+            return obj
+        except json.JSONDecodeError:
+            pass
+
+    end_char = "}" if expected_type is dict else "]"
+    end = text.rfind(end_char)
+    if start != -1 and end != -1:
+        text = text[start : end + 1]
+
+    return json.loads(text)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Phase 1: Website Scraping, Web Research & Analysis
 # ═══════════════════════════════════════════════════════════════════════
@@ -129,20 +158,12 @@ Be thorough. Use REAL data from your search results, not made-up information."""
         print("[SaaSShorts] ⚠️ Gemini returned empty response for web research")
         return {"raw_research": "", "product_name": domain, "grounding_sources": sources}
 
-    text = raw.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\n?", "", text)
-        text = re.sub(r"\n?```$", "", text)
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1:
-        text = text[start : end + 1]
-
     try:
-        research = json.loads(text)
-    except json.JSONDecodeError:
-        research = {"raw_research": text, "product_name": domain}
+        research = _parse_json_from_llm(raw, expected_type=dict)
+        if not isinstance(research, dict):
+            research = {"raw_research": raw, "product_name": domain}
+    except Exception:
+        research = {"raw_research": raw, "product_name": domain}
 
     research["grounding_sources"] = sources
     print(f"[SaaSShorts] ✅ Web research complete: {len(sources)} sources found")
@@ -364,20 +385,12 @@ Include 5-8 pain points, 4-6 emotional hooks, and 4+ viral angles."""
     if not raw:
         raise Exception("Gemini returned empty response for SaaS analysis")
 
-    text = raw.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\n?", "", text)
-        text = re.sub(r"\n?```$", "", text)
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1:
-        text = text[start : end + 1]
-
     try:
-        analysis = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise Exception(f"Failed to parse analysis JSON: {e}\nRaw: {text[:500]}")
+        analysis = _parse_json_from_llm(raw, expected_type=dict)
+        if not isinstance(analysis, dict):
+            raise ValueError("Expected JSON object for SaaS analysis")
+    except Exception as e:
+        raise Exception(f"Failed to parse analysis JSON: {e}\nRaw: {raw[:500]}")
 
     # Attach web research sources for reference
     if web_research and web_research.get("grounding_sources"):
@@ -549,20 +562,12 @@ RULES:
     if not raw:
         raise Exception("Gemini returned empty response for script generation")
 
-    text = raw.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\n?", "", text)
-        text = re.sub(r"\n?```$", "", text)
-
-    start = text.find("[")
-    end = text.rfind("]")
-    if start != -1 and end != -1:
-        text = text[start : end + 1]
-
     try:
-        scripts = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise Exception(f"Failed to parse scripts JSON: {e}\nRaw: {text[:500]}")
+        scripts = _parse_json_from_llm(raw, expected_type=list)
+        if not isinstance(scripts, list):
+            raise ValueError("Expected JSON array for scripts")
+    except Exception as e:
+        raise Exception(f"Failed to parse scripts JSON: {e}\nRaw: {raw[:500]}")
 
     print(f"[SaaSShorts] ✅ Generated {len(scripts)} scripts")
     return scripts
@@ -648,6 +653,7 @@ def _fal_run(model_id: str, input_data: dict, fal_key: str, timeout: int = 600) 
 
 def _fal_upload_file(file_path: str, fal_key: str) -> str:
     """Upload a local file to fal.ai CDN storage and return public URL."""
+    fal_key = fal_key.strip()
     headers = {"Authorization": f"Key {fal_key}"}
 
     filename = os.path.basename(file_path)
@@ -663,18 +669,52 @@ def _fal_upload_file(file_path: str, fal_key: str) -> str:
     }
     content_type = content_types.get(ext, "application/octet-stream")
 
-    # Initiate upload
-    with httpx.Client(timeout=30.0) as client:
-        resp = client.post(
-            "https://rest.alpha.fal.ai/storage/upload/initiate",
-            headers={**headers, "Content-Type": "application/json"},
-            json={"file_name": filename, "content_type": content_type},
-        )
-        resp.raise_for_status()
-        upload_info = resp.json()
+    # Initiate upload (try production rest.fal.ai first, fallback to rest.alpha.fal.ai)
+    upload_url = None
+    file_url = None
+    last_error = None
 
-    upload_url = upload_info["upload_url"]
-    file_url = upload_info["file_url"]
+    endpoints = [
+        "https://rest.fal.ai/storage/upload/initiate",
+        "https://rest.alpha.fal.ai/storage/upload/initiate",
+    ]
+
+    for endpoint in endpoints:
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(
+                    endpoint,
+                    headers={**headers, "Content-Type": "application/json"},
+                    json={"file_name": filename, "content_type": content_type},
+                )
+            if resp.status_code == 200:
+                upload_info = resp.json()
+                upload_url = upload_info.get("upload_url")
+                file_url = upload_info.get("file_url")
+                if upload_url and file_url:
+                    break
+            else:
+                body = resp.text.strip()
+                if resp.status_code == 403:
+                    last_error = (
+                        f"fal.ai 403 Forbidden: {body}. "
+                        "This usually indicates your fal.ai account has run out of credits ($0 balance), "
+                        "has an unpaid invoice, or the API key lacks storage permissions. "
+                        "Check your balance and keys at https://fal.ai/dashboard/billing"
+                    )
+                elif resp.status_code == 401:
+                    last_error = (
+                        f"fal.ai 401 Unauthorized: {body}. "
+                        "Please verify your FAL_KEY is valid and formatted as <key_id>:<key_secret>."
+                    )
+                else:
+                    last_error = f"fal.ai storage upload initiate failed ({resp.status_code}): {body}"
+                print(f"[fal.ai] Storage initiate error from {endpoint}: {last_error}")
+        except Exception as e:
+            last_error = f"fal.ai initiate error connecting to {endpoint}: {e}"
+
+    if not upload_url or not file_url:
+        raise Exception(last_error or "Failed to initiate file upload to fal.ai")
 
     # Upload file content
     with open(file_path, "rb") as f:
@@ -686,7 +726,8 @@ def _fal_upload_file(file_path: str, fal_key: str) -> str:
             content=file_bytes,
             headers={"Content-Type": content_type},
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            raise Exception(f"fal.ai file upload PUT failed ({resp.status_code}): {resp.text[:300]}")
 
     print(f"[fal.ai] Uploaded {filename} → {file_url}")
     return file_url

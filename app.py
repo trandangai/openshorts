@@ -1715,6 +1715,10 @@ if BILLING_ENABLED:
 import mcp_server as _mcp_server
 app.include_router(_mcp_server.router)
 
+# Shorts Cutter (v2): Standalone zero-cost video-to-shorts pipeline
+import shorts_cutter.router as _shorts_cutter_router
+app.include_router(_shorts_cutter_router.router)
+
 # Enable CORS for frontend. Cloud mode locks this down to the configured origins;
 # self-host keeps the permissive wildcard it has always used.
 app.add_middleware(

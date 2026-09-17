@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link2, Upload, FileVideo, X, Info, Loader2, ChevronDown } from 'lucide-react';
+import { Link2, Upload, FileVideo, X, Info, Loader2, ChevronDown, Zap, Scissors } from 'lucide-react';
 import { getApiUrl } from '../config';
 
 const SUPPORTED_PLATFORMS = [
@@ -7,7 +7,7 @@ const SUPPORTED_PLATFORMS = [
     'Facebook', 'Instagram', 'Dailymotion', 'Reddit', 'Streamable',
 ];
 
-export default function MediaInput({ onProcess, isProcessing }) {
+export default function MediaInput({ onProcess, isProcessing, onSwitchToShortsCutter }) {
     const [youtubeUrlEnabled, setYoutubeUrlEnabled] = useState(true);
     // File upload is the primary path; the link is secondary.
     const [mode, setMode] = useState('file'); // 'file' | 'url'
@@ -108,6 +108,22 @@ export default function MediaInput({ onProcess, isProcessing }) {
 
     return (
         <div className="card p-4 sm:p-6 animate-fade">
+            {onSwitchToShortsCutter && (
+                <div className="mb-4 p-2.5 rounded-input bg-accent/5 border border-accent/20 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                    <span className="text-muted flex items-center gap-1.5">
+                        <Zap size={14} className="text-accent shrink-0" />
+                        <span>Try <strong>Shorts Cutter (v2)</strong>: zero cloud cost ($0), faster local rendering &amp; karaoke subtitles.</span>
+                    </span>
+                    <button
+                        type="button"
+                        onClick={onSwitchToShortsCutter}
+                        className="px-2.5 py-1 rounded bg-accent/15 hover:bg-accent/25 text-accent font-medium border border-accent/30 whitespace-nowrap transition-colors flex items-center gap-1"
+                    >
+                        <Scissors size={12} /> Switch to Shorts Cutter v2 →
+                    </button>
+                </div>
+            )}
+
             <div className="flex gap-4 sm:gap-6 mb-6 border-b border-rule" data-tutorial="source-tabs">
                 <button
                     onClick={() => setMode('file')}
