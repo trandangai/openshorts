@@ -47,6 +47,10 @@ def main():
         help="Reframing mode for 9:16 vertical video (default: pillar_blur)"
     )
     parser.add_argument(
+        "--coverage", choices=["part", "full"], default="part",
+        help="Coverage mode: 'part' for viral highlights or 'full' for sequential chronological series (default: part)"
+    )
+    parser.add_argument(
         "--no-subtitles", action="store_true", help="Disable burning dynamic karaoke subtitles"
     )
     parser.add_argument(
@@ -57,10 +61,15 @@ def main():
 
     mode = ReframingMode.SMART_CROP if args.mode == "smart_crop" else ReframingMode.PILLAR_BLUR
 
+    # In full series mode, if user didn't change default max_clips, increase it to 20
+    max_clips = args.max_clips
+    if args.coverage == "full" and max_clips == 3:
+        max_clips = 20
+
     config = JobConfig(
         source_input=args.input,
         output_dir=args.out,
-        max_clips=args.max_clips,
+        max_clips=max_clips,
         min_clip_duration=args.min_duration,
         max_clip_duration=args.max_duration,
         whisper_model_size=args.whisper_model,
@@ -69,12 +78,14 @@ def main():
         reframing_mode=mode,
         burn_subtitles=not args.no_subtitles,
         subtitles_font_size=args.font_size,
+        coverage_mode=args.coverage,
     )
 
     print("=" * 60)
     print("🎬 shorts_cutter: Starting pipeline execution")
     print(f"   Input:      {config.source_input}")
     print(f"   Mode:       {config.reframing_mode.value}")
+    print(f"   Coverage:   {config.coverage_mode.upper()} ({'Sequential Full Video' if config.coverage_mode == 'full' else 'Viral Highlights'})")
     print(f"   Clips Max:  {config.max_clips} ({config.min_clip_duration}s - {config.max_clip_duration}s)")
     print(f"   Output Dir: {config.output_dir}")
     print("=" * 60)

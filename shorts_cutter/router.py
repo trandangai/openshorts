@@ -23,10 +23,11 @@ JOBS_STORE: Dict[str, Dict[str, Any]] = {}
 
 class ProcessRequest(BaseModel):
     input_source: str = Field(..., description="YouTube URL or server-accessible local video path")
-    max_clips: int = Field(default=3, ge=1, le=10, description="Max shorts to extract")
+    max_clips: int = Field(default=3, ge=1, le=30, description="Max shorts to extract")
     min_clip_duration: float = Field(default=15.0, ge=5.0, le=120.0)
     max_clip_duration: float = Field(default=60.0, ge=10.0, le=180.0)
     reframing_mode: str = Field(default="pillar_blur", description="'pillar_blur' or 'smart_crop'")
+    coverage_mode: str = Field(default="part", description="'part' (viral highlights) or 'full' (sequential full video series)")
     burn_subtitles: bool = Field(default=True, description="Burn word-highlighted subtitles")
     whisper_model_size: str = Field(default="base", description="faster-whisper model: tiny, base, small")
     gemini_model: str = Field(default="gemini-2.0-flash")
@@ -92,12 +93,14 @@ async def start_shorts_job(
         gemini_model=req.gemini_model,
         reframing_mode=mode,
         burn_subtitles=req.burn_subtitles,
+        coverage_mode=req.coverage_mode,
     )
 
     JOBS_STORE[job_id] = {
         "job_id": job_id,
         "status": "QUEUED",
         "input_source": req.input_source,
+        "coverage_mode": req.coverage_mode,
         "created_at": asyncio.get_event_loop().time(),
     }
 

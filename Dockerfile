@@ -100,11 +100,20 @@ RUN mkdir -p /app/uploads /app/output /app/.cache/huggingface /tmp/Ultralytics
 # Fix permissions: /app for code/uploads, /tmp/Ultralytics for AI cache
 RUN chown -R appuser:appuser /app /tmp/Ultralytics
 
+# Pre-download YOLO model on build. Stored in /opt/models so host volume mounts (e.g. .:/app)
+# don't shadow the weights, and downloaded via curl -fSL because python urllib is often
+# blocked by GitHub with HTTP 403 Forbidden.
+RUN mkdir -p /opt/models \
+    && curl -fSL -o /opt/models/yolov8n.pt https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8n.pt \
+    && chown -R appuser:appuser /opt/models
+
+ENV YOLO_MODEL_PATH=/opt/models/yolov8n.pt
+
 # Switch to non-root user
 USER appuser
 
-# Pre-download YOLO model on build (now running as appuser)
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+# Pre-load/verify YOLO model on build (running as appuser)
+RUN python -c "from ultralytics import YOLO; YOLO('/opt/models/yolov8n.pt')"
 
 # Expose FastAPI port
 EXPOSE 8000

@@ -25,8 +25,14 @@ from shorts_cutter.subtitles import (
 )
 from shorts_cutter.analyzer import _extract_json, _heuristic_analyze_moments
 from shorts_cutter.reframer import build_reframing_filter
-from fastapi.testclient import TestClient
-from shorts_cutter.router import standalone_app
+try:
+    from fastapi.testclient import TestClient
+    from shorts_cutter.router import standalone_app
+    HAS_FASTAPI = True
+except ImportError:
+    TestClient = None
+    standalone_app = None
+    HAS_FASTAPI = False
 
 
 class TestShortsCutter(unittest.TestCase):
@@ -167,6 +173,8 @@ class TestShortsCutter(unittest.TestCase):
         self.assertIn("scale=1080:1920", sc)
 
     def test_router_health(self):
+        if not HAS_FASTAPI:
+            self.skipTest("fastapi not installed in current environment")
         client = TestClient(standalone_app)
         response = client.get("/api/shorts-cutter/health")
         self.assertEqual(response.status_code, 200)
@@ -175,9 +183,75 @@ class TestShortsCutter(unittest.TestCase):
         self.assertEqual(data["service"], "shorts_cutter")
 
     def test_router_job_not_found(self):
+        if not HAS_FASTAPI:
+            self.skipTest("fastapi not installed in current environment")
         client = TestClient(standalone_app)
         response = client.get("/api/shorts-cutter/jobs/nonexistent-id")
         self.assertEqual(response.status_code, 404)
+
+    def test_heuristic_full_series_coverage(self):
+        segments = [
+            Segment(
+                id=i,
+                start=i * 10.0,
+                end=(i + 1) * 10.0,
+                text=f"This is sentence {i} explaining topic {i}.",
+                words=[
+                    WordTimestamp(word="This", start=i * 10.0, end=i * 10.0 + 1.0),
+                    WordTimestamp(word="topic", start=i * 10.0 + 1.1, end=(i + 1) * 10.0),
+                ],
+            )
+            for i in range(12)  # 120 seconds total
+        ]
+        transcript = Transcript(
+            full_text="120 seconds full transcript",
+            language="en",
+            duration=120.0,
+            segments=segments,
+        )
+
+        parts = _heuristic_analyze_moments(
+            transcript,
+            max_clips=10,
+            min_duration=20.0,
+            max_duration=40.0,
+            coverage_mode="full",
+        )
+
+        self.assertGreaterEqual(len(parts), 3)
+        # Verify sequential Part naming
+        self.assertTrue(parts[0].title.startswith("Part 1:"))
+        self.assertTrue(parts[1].title.startswith("Part 2:"))
+        self.assertTrue(parts[2].title.startswith("Part 3:"))
+
+        # Verify contiguous boundaries (no gaps between parts)
+        self.assertAlmostEqual(parts[0].start, 0.0)
+        self.assertAlmostEqual(parts[1].start, parts[0].end)
+        self.assertAlmostEqual(parts[2].start, parts[1].end)
+
+    def test_router_process_endpoint_coverage_mode(self):
+        if not HAS_FASTAPI:
+            self.skipTest("fastapi not installed in current environment")
+        client = TestClient(standalone_app)
+        response = client.post(
+            "/api/shorts-cutter/process",
+            json={
+                "input_source": "demo-openshorts.mp4",
+                "coverage_mode": "full",
+                "max_clips": 10,
+                "min_clip_duration": 15.0,
+                "max_clip_duration": 60.0,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "QUEUED")
+        self.assertIn("job_id", data)
+
+        # Check job store has coverage_mode recorded
+        from shorts_cutter.router import JOBS_STORE
+        job_id = data["job_id"]
+        self.assertEqual(JOBS_STORE[job_id]["coverage_mode"], "full")
 
 
 if __name__ == "__main__":

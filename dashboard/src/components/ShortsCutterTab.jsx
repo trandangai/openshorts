@@ -25,6 +25,7 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
   const [uploading, setUploading] = useState(false);
 
   // Settings
+  const [coverageMode, setCoverageMode] = useState('part'); // 'part' | 'full'
   const [reframingMode, setReframingMode] = useState('pillar_blur');
   const [maxClips, setMaxClips] = useState(3);
   const [minDuration, setMinDuration] = useState(15);
@@ -126,6 +127,7 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
         headers,
         body: JSON.stringify({
           input_source: sourcePath,
+          coverage_mode: coverageMode,
           max_clips: parseInt(maxClips, 10),
           min_clip_duration: parseFloat(minDuration),
           max_clip_duration: parseFloat(maxDuration),
@@ -229,9 +231,14 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
             {/* Generated Clips Grid */}
             {jobStatus === 'COMPLETED' && jobData?.clips && (
               <div className="space-y-4 pt-4 border-t border-rule">
-                <h4 className="text-sm font-mono uppercase tracking-wider text-muted flex items-center gap-2">
-                  <Film size={14} className="text-accent" /> Generated Vertical Clips ({jobData.clips.length})
-                </h4>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-sm font-mono uppercase tracking-wider text-muted flex items-center gap-2">
+                    <Film size={14} className="text-accent" /> Generated Vertical Clips ({jobData.clips.length})
+                  </h4>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-paper border border-rule text-ink2 font-mono">
+                    Mode: {jobData.coverage_mode === 'full' || coverageMode === 'full' ? '🎬 Full Video Series' : '⚡ Viral Highlights'}
+                  </span>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {jobData.clips.map((clip) => {
@@ -243,6 +250,8 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
                     const srtUrl = clip.srt_url
                       ? getApiUrl(clip.srt_url)
                       : (srtFilename ? getApiUrl(`/api/shorts-cutter/jobs/${jobId}/files/${srtFilename}`) : null);
+
+                    const isPart = clip.title && clip.title.toLowerCase().startsWith('part ');
 
                     return (
                       <div key={clip.id} className="p-4 rounded-card bg-paper border border-rule space-y-3">
@@ -258,10 +267,17 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
                         </div>
 
                         <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <h5 className="text-sm font-medium text-ink truncate">{clip.title}</h5>
-                            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">
-                              {clip.virality_score}% Viral
+                          <div className="flex items-center justify-between gap-2">
+                            <h5 className="text-sm font-medium text-ink truncate flex items-center gap-1.5">
+                              {isPart && (
+                                <span className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent/20 text-accent font-bold">
+                                  PART {clip.id}
+                                </span>
+                              )}
+                              <span className="truncate">{clip.title}</span>
+                            </h5>
+                            <span className="shrink-0 text-[11px] font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">
+                              {clip.virality_score}%
                             </span>
                           </div>
                           {clip.hook && (
@@ -379,6 +395,76 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
               </div>
             )}
 
+            {/* Video Coverage Mode Selector: Full Series vs Part Highlights */}
+            <div className="space-y-2.5 pt-2 border-t border-rule">
+              <label className="text-xs font-mono uppercase tracking-wider text-muted flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-accent" /> Video Coverage Mode
+                </span>
+                <span className="text-[11px] text-muted lowercase font-mono">
+                  {coverageMode === 'full' ? 'continuous full-length series' : 'selective viral hooks'}
+                </span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Part (Highlights) Option */}
+                <div
+                  onClick={() => {
+                    setCoverageMode('part');
+                    if (maxClips > 5) setMaxClips(3);
+                  }}
+                  className={`p-3.5 rounded-input border cursor-pointer transition-all space-y-1 ${
+                    coverageMode === 'part'
+                      ? 'border-accent bg-accent/10 shadow-sm'
+                      : 'border-rule bg-paper hover:bg-paper3 opacity-80 hover:opacity-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-ink flex items-center gap-1.5">
+                      <Zap size={14} className={coverageMode === 'part' ? 'text-accent' : 'text-muted'} />
+                      Part / Viral Highlights
+                    </span>
+                    {coverageMode === 'part' && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent text-accent-ink font-bold">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted leading-relaxed">
+                    Extracts the top 1–5 standalone viral moments and highest-energy hooks.
+                  </p>
+                </div>
+
+                {/* Full Series Option */}
+                <div
+                  onClick={() => {
+                    setCoverageMode('full');
+                    if (maxClips < 10) setMaxClips(10);
+                  }}
+                  className={`p-3.5 rounded-input border cursor-pointer transition-all space-y-1 ${
+                    coverageMode === 'full'
+                      ? 'border-accent bg-accent/10 shadow-sm'
+                      : 'border-rule bg-paper hover:bg-paper3 opacity-80 hover:opacity-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-ink flex items-center gap-1.5">
+                      <Film size={14} className={coverageMode === 'full' ? 'text-accent' : 'text-muted'} />
+                      Full Video Series (Part 1, 2, 3...)
+                    </span>
+                    {coverageMode === 'full' && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent text-accent-ink font-bold">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted leading-relaxed">
+                    Covers 100% of the video sequentially without gaps, numbered chapter by chapter.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Controls & Pipeline Options */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2 border-t border-rule">
               {/* Reframing Mode */}
@@ -401,21 +487,40 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
                 </p>
               </div>
 
-              {/* Number of Clips */}
+              {/* Number of Clips / Parts */}
               <div className="space-y-2">
                 <label className="text-xs font-mono uppercase tracking-wider text-muted">
-                  Max Viral Clips to Extract
+                  {coverageMode === 'full' ? 'Max Series Parts to Extract' : 'Max Viral Clips to Extract'}
                 </label>
-                <select
-                  value={maxClips}
-                  onChange={(e) => setMaxClips(e.target.value)}
-                  className="w-full px-3 py-2 rounded-input bg-paper border border-rule text-ink text-sm focus:outline-none focus:border-accent"
-                >
-                  <option value="1">1 Short</option>
-                  <option value="2">2 Shorts</option>
-                  <option value="3">3 Shorts</option>
-                  <option value="5">5 Shorts</option>
-                </select>
+                {coverageMode === 'full' ? (
+                  <select
+                    value={maxClips}
+                    onChange={(e) => setMaxClips(e.target.value)}
+                    className="w-full px-3 py-2 rounded-input bg-paper border border-rule text-ink text-sm focus:outline-none focus:border-accent"
+                  >
+                    <option value="5">Up to 5 Parts (~2-4 min video)</option>
+                    <option value="10">Up to 10 Parts (~5-8 min video)</option>
+                    <option value="15">Up to 15 Parts (~8-12 min video)</option>
+                    <option value="20">Up to 20 Parts (~12-18 min video)</option>
+                    <option value="30">Up to 30 Parts (Long-form / 20+ min)</option>
+                  </select>
+                ) : (
+                  <select
+                    value={maxClips}
+                    onChange={(e) => setMaxClips(e.target.value)}
+                    className="w-full px-3 py-2 rounded-input bg-paper border border-rule text-ink text-sm focus:outline-none focus:border-accent"
+                  >
+                    <option value="1">1 Short</option>
+                    <option value="2">2 Shorts</option>
+                    <option value="3">3 Shorts (Recommended)</option>
+                    <option value="5">5 Shorts</option>
+                  </select>
+                )}
+                <p className="text-[11px] text-muted">
+                  {coverageMode === 'full'
+                    ? 'Will partition the timeline sequentially until the whole video is covered.'
+                    : 'Ranks clips by virality score and outputs the top picks.'}
+                </p>
               </div>
 
               {/* Duration Range */}
@@ -504,9 +609,13 @@ export default function ShortsCutterTab({ geminiApiKey = '' }) {
                   <>
                     <Loader2 size={18} className="animate-spin" /> Uploading Video File...
                   </>
+                ) : coverageMode === 'full' ? (
+                  <>
+                    <Film size={18} /> Cut Full Video Series (Part 1, 2, ...) · $0 Cost
+                  </>
                 ) : (
                   <>
-                    <Scissors size={18} /> Cut Viral Shorts Now ($0 Cost)
+                    <Scissors size={18} /> Cut Viral Shorts Highlights ($0 Cost)
                   </>
                 )}
               </button>

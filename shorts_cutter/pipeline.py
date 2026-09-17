@@ -65,7 +65,7 @@ def run_pipeline(config: JobConfig, progress_callback: Optional[callable] = None
         }
 
         # 3. Viral Moment Detection
-        update_progress("ANALYZE", 50, "Detecting viral moments...")
+        update_progress("ANALYZE", 50, f"Detecting clips ({config.coverage_mode} coverage)...")
         moments = analyze_viral_moments(
             transcript=transcript,
             gemini_api_key=config.gemini_api_key,
@@ -73,6 +73,7 @@ def run_pipeline(config: JobConfig, progress_callback: Optional[callable] = None
             max_clips=config.max_clips,
             min_duration=config.min_clip_duration,
             max_duration=config.max_clip_duration,
+            coverage_mode=config.coverage_mode,
         )
 
         # Fallback if no moments found (e.g. silent video or very short)

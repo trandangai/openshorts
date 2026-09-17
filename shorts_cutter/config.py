@@ -105,6 +105,7 @@ class JobConfig:
     burn_subtitles: bool = True
     subtitles_font_size: int = 24
     subtitles_highlight_color: str = "&H00D6FF"  # Yellow BGR (&H00D6FF)
+    coverage_mode: str = "part"  # "part" (highlights) or "full" (sequential full video series)
 
     def __post_init__(self):
         if not self.gemini_api_key:
