@@ -130,7 +130,7 @@ brew install ffmpeg node python@3.11
    cd dashboard
    ```
 
-2. Install Node dependencies:
+2. Install Node dependencies :
    ```bash
    npm install
    ```
