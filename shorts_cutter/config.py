@@ -112,7 +112,7 @@ class JobConfig:
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None  # None = keep original audio, or specify voice_id to dub/voiceover
     watermark_path: Optional[str] = "assets/logo_maf_1.png"  # Path to channel logo / watermark (None to disable)
-    watermark_width: int = 290  # Rendered pixel width of the watermark logo
+    watermark_width: int = 334  # Rendered pixel width of the watermark logo (scaled +15%)
 
     def __post_init__(self):
         if not self.gemini_api_key:

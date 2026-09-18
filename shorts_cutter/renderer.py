@@ -30,7 +30,7 @@ def render_clip(
     crf: int = 20,
     preset: str = "fast",
     watermark_path: Optional[str] = None,
-    watermark_width: int = 290,
+    watermark_width: int = 334,
 ) -> str:
     """
     Renders a single vertical Short from source video.
@@ -99,6 +99,16 @@ def render_clip(
     if has_watermark:
         if reframing_mode == ReframingMode.PILLAR_BLUR:
             fg_top_y = int((target_height - (target_width * 9 / 16)) / 2)
+            # Cleanly erase original top-right watermark behind the logo so nothing peeks through dips/curves
+            delogo_x = 835
+            delogo_y = fg_top_y + 29
+            delogo_w = 215
+            delogo_h = 42
+            filter_parts.append(
+                f"[{current_v}]delogo=x={delogo_x}:y={delogo_y}:w={delogo_w}:h={delogo_h}:show=0[cleanedv]"
+            )
+            current_v = "cleanedv"
+
             if "logo_maf_1" in str(watermark_path):
                 # Clean, balanced corner placement inside the 16:9 video frame
                 overlay_x = "W-w-24"

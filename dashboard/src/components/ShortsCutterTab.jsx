@@ -21,8 +21,29 @@ import {
   Check,
   Search,
   Globe,
+  Plus,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { getApiUrl } from '../config';
+
+const WATERMARK_PRESETS = [
+  {
+    id: 'maf_1',
+    name: 'MAF Kids Cloud Badge',
+    badgeText: 'DEFAULT / RECOMMENDED',
+    description: 'Cloud badge with star (compact, covers watermarks)',
+    backendPath: 'assets/logo_maf_1.png',
+    previewUrl: '/logos/logo_maf_1.png',
+  },
+  {
+    id: 'maf_kids',
+    name: 'MAF Kids Classic',
+    badgeText: 'ORIGINAL LOGO',
+    description: 'Round character badge with title',
+    backendPath: 'assets/logo_mafKids.png',
+    previewUrl: '/logos/logo_mafKids.png',
+  },
+];
 
 export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = '' }) {
   const [inputType, setInputType] = useState('url'); // 'url' | 'file'
@@ -42,6 +63,12 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
   const [translateToEnglish, setTranslateToEnglish] = useState(false);
   const [kidsStorytellingMode, setKidsStorytellingMode] = useState(false);
   const [overlayLogo, setOverlayLogo] = useState(true);
+  const [selectedWatermarkPreset, setSelectedWatermarkPreset] = useState('maf_1'); // 'maf_1' | 'maf_kids' | 'custom'
+  const [customWatermarkPath, setCustomWatermarkPath] = useState(null);
+  const [customWatermarkPreview, setCustomWatermarkPreview] = useState(null);
+  const [customWatermarkName, setCustomWatermarkName] = useState('');
+  const [uploadingWatermark, setUploadingWatermark] = useState(false);
+  const watermarkFileInputRef = useRef(null);
   const [customGeminiKey, setCustomGeminiKey] = useState(geminiApiKey || '');
 
   // ElevenLabs Voiceover Settings
@@ -188,6 +215,47 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
     };
   }, [jobId, jobStatus]);
 
+  const handleWatermarkUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const localUrl = URL.createObjectURL(file);
+    setCustomWatermarkPreview(localUrl);
+    setCustomWatermarkName(file.name);
+    setUploadingWatermark(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(getApiUrl('/api/shorts-cutter/upload'), {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Watermark upload failed');
+      }
+      const data = await res.json();
+      setCustomWatermarkPath(data.file_path);
+      setSelectedWatermarkPreset('custom');
+      setOverlayLogo(true);
+    } catch (err) {
+      console.error('Failed to upload watermark:', err);
+      alert(err.message || 'Failed to upload watermark image');
+    } finally {
+      setUploadingWatermark(false);
+    }
+  };
+
+  const currentWatermarkPreview = (() => {
+    if (!overlayLogo) return null;
+    if (selectedWatermarkPreset === 'custom') {
+      return customWatermarkPreview;
+    }
+    const preset = WATERMARK_PRESETS.find((p) => p.id === selectedWatermarkPreset);
+    return preset ? preset.previewUrl : '/logos/logo_maf_1.png';
+  })();
+
   const handleStartProcess = async () => {
     setErrorMsg(null);
     setJobData(null);
@@ -229,6 +297,17 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
       sourcePath = url.trim();
     }
 
+    // Determine watermark path to use
+    let effectiveWatermarkPath = null;
+    if (overlayLogo) {
+      if (selectedWatermarkPreset === 'custom' && customWatermarkPath) {
+        effectiveWatermarkPath = customWatermarkPath;
+      } else {
+        const p = WATERMARK_PRESETS.find((x) => x.id === selectedWatermarkPreset);
+        effectiveWatermarkPath = p ? p.backendPath : 'assets/logo_maf_1.png';
+      }
+    }
+
     // Submit processing job
     try {
       setJobStatus('QUEUED');
@@ -255,7 +334,7 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
           language: language !== 'auto' ? language : null,
           translate_to_english: translateToEnglish,
           kids_storytelling_mode: kidsStorytellingMode,
-          watermark_path: overlayLogo ? 'assets/logo_maf_1.png' : null,
+          watermark_path: effectiveWatermarkPath,
           elevenlabs_voice_id: enableVoiceover ? selectedVoiceId : null,
         }),
       });
@@ -792,29 +871,131 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
                 />
               </label>
 
-              {/* Brand Watermark / Logo Overlay Toggle */}
-              <label className="flex items-center justify-between p-3 rounded-input bg-paper border border-rule cursor-pointer hover:border-accent/40 transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="text-base">🦁 🏷️</span>
-                  <div>
-                    <span className="text-sm font-medium text-ink flex items-center gap-2">
-                      Overlay Channel Brand Logo (MAF Kids)
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold">
-                        CLEAN WATERMARK
+              {/* Brand Watermark / Logo Overlay Section (Option A + Option C) */}
+              <div className="p-3.5 rounded-input bg-paper border border-rule transition-colors">
+                {/* Header Toggle with Visual Logo Thumbnail Preview (Option A) */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-9 rounded-md bg-paper2/80 border border-rule flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-inner">
+                      {currentWatermarkPreview ? (
+                        <img
+                          src={currentWatermarkPreview}
+                          alt="Active watermark badge"
+                          className="max-h-full max-w-full object-contain drop-shadow-sm"
+                        />
+                      ) : (
+                        <span className="text-[10px] font-mono text-muted uppercase">Off</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-ink flex items-center gap-2">
+                        Overlay Channel Brand Logo
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold">
+                          CLEAN WATERMARK
+                        </span>
                       </span>
-                    </span>
-                    <span className="text-xs text-muted block">
-                      Stamps transparent MAF Kids cloud logo on top-right to neatly cover original video watermarks.
-                    </span>
+                      <span className="text-xs text-muted block">
+                        Stamps transparent channel badge on top-right to neatly cover original video watermarks.
+                      </span>
+                    </div>
                   </div>
+                  <input
+                    type="checkbox"
+                    checked={overlayLogo}
+                    onChange={(e) => setOverlayLogo(e.target.checked)}
+                    className="w-4 h-4 rounded text-accent focus:ring-accent accent-[#e5a93c] cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={overlayLogo}
-                  onChange={(e) => setOverlayLogo(e.target.checked)}
-                  className="w-4 h-4 rounded text-accent focus:ring-accent accent-[#e5a93c]"
-                />
-              </label>
+
+                {/* Preset & Custom Logo Picker (Option C - visible when enabled) */}
+                {overlayLogo && (
+                  <div className="mt-3 pt-3 border-t border-rule space-y-2">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-muted block">
+                      Select Badge or Upload Custom Logo:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {WATERMARK_PRESETS.map((preset) => {
+                        const isSelected = selectedWatermarkPreset === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => setSelectedWatermarkPreset(preset.id)}
+                            className={`flex items-center gap-2.5 p-2 rounded-lg border text-left transition-all ${
+                              isSelected
+                                ? 'bg-accent/10 border-accent text-ink shadow-sm ring-1 ring-accent/30'
+                                : 'bg-paper2/50 border-rule text-muted hover:border-rule-strong hover:text-ink'
+                            }`}
+                          >
+                            <div className="w-10 h-8 rounded bg-black/20 border border-rule/50 flex items-center justify-center p-0.5 shrink-0 overflow-hidden">
+                              <img
+                                src={preset.previewUrl}
+                                alt={preset.name}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium truncate text-ink">{preset.name}</span>
+                                {isSelected && <Check size={12} className="text-accent shrink-0 ml-1" />}
+                              </div>
+                              <span className="text-[10px] text-muted block truncate">{preset.badgeText}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+
+                      {/* Custom Upload Card */}
+                      <div
+                        onClick={() => watermarkFileInputRef.current?.click()}
+                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                          selectedWatermarkPreset === 'custom'
+                            ? 'bg-accent/10 border-accent text-ink shadow-sm ring-1 ring-accent/30'
+                            : 'bg-paper2/50 border-dashed border-rule text-muted hover:border-rule-strong hover:text-ink'
+                        }`}
+                      >
+                        <input
+                          ref={watermarkFileInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          onChange={handleWatermarkUpload}
+                        />
+                        <div className="w-10 h-8 rounded bg-black/20 border border-rule/50 flex items-center justify-center p-0.5 shrink-0 overflow-hidden">
+                          {uploadingWatermark ? (
+                            <Loader2 size={14} className="animate-spin text-accent" />
+                          ) : customWatermarkPreview ? (
+                            <img
+                              src={customWatermarkPreview}
+                              alt="Custom watermark"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <Plus size={14} className="text-muted" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium truncate text-ink">
+                              {customWatermarkName ? customWatermarkName : 'Upload Custom'}
+                            </span>
+                            {selectedWatermarkPreset === 'custom' && (
+                              <Check size={12} className="text-accent shrink-0 ml-1" />
+                            )}
+                          </div>
+                          <span className="text-[10px] text-muted block truncate">
+                            {uploadingWatermark
+                              ? 'Uploading...'
+                              : customWatermarkPath
+                              ? 'Custom PNG'
+                              : 'PNG (Transparent)'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-mono uppercase tracking-wider text-muted">
