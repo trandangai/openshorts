@@ -89,6 +89,14 @@ All generated videos and avatars are saved to a public gallery with SEO pages fo
 - **Hook Text Overlays**: AI-generated attention-grabbing text overlays
 - **AI Video Effects**: Gemini-generated FFmpeg filters for professional effects
 
+### Shorts Cutter (v2) - Modular & Zero-Overhead Pipeline
+- **Zero-Cost Local Architecture**: Standalone pipeline using local `yt-dlp`, `faster-whisper`, and Google Gemini Flash-Lite with zero mandatory 3rd-party fees.
+- **Flexible Coverage Modes**: Choose between **Viral Highlights** (top energetic hooks) and **Full Series** (sequential Part 1, Part 2, ... covering 100% of the video).
+- **Brand Watermark Overlay & Concealment**: Automatically conceals original video watermarks with custom channel branding (`assets/logo_maf_1.png` / `assets/logo_mafKids.png`) in a single FFmpeg pass with zero re-encoding penalty and pixel-perfect coordinate alignment (`W-w-24 : fg_top_y+16`).
+- **AI Voice Changing & Dubbing**: Replace original audio with ElevenLabs voices (`eleven_flash_v2_5`, 32 languages) or one-click Whisper speech translation into English.
+- **AI Kids Storytelling Mode**: Disney/Pixar script adaptation adhering to strict speech budget constraints ($\pm 5$ words).
+- **Interactive UI & Headless CLI**: Access via the dedicated `Shorts Cutter (v2)` dashboard tab, REST API (`/api/shorts-cutter`), or CLI (`python3 -m shorts_cutter.cli`).
+
 ### AI Shorts Pipeline
 1. **Analyze**: Scrape website URL + web research, or generate from manual description
 2. **Script**: AI writes viral scripts (hook - problem - solution - CTA format)

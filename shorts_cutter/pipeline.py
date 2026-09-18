@@ -192,6 +192,8 @@ def run_pipeline(config: JobConfig, progress_callback: Optional[callable] = None
                 reframing_mode=config.reframing_mode,
                 target_width=config.target_width,
                 target_height=config.target_height,
+                watermark_path=config.watermark_path,
+                watermark_width=config.watermark_width,
             )
 
             video_fname = os.path.basename(output_mp4)

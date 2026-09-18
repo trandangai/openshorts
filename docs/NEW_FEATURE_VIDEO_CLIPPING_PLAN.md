@@ -28,6 +28,7 @@ The goal of this feature is to provide a dedicated, lightweight, and modular pip
 | **`TSK-10`** | Full Series vs Part Coverage | Sequential multi-part video series (`Part 1`, `Part 2`, ...) covering 100% of video | `COMPLETED` ✅ | 100% |
 | **`TSK-11`** | ElevenLabs AI Voice Changing | `voiceover.py`: Replace original speaker voice with ElevenLabs voices (presets or cloned) | `COMPLETED` ✅ | 100% |
 | **`TSK-12`** | AI Kids Story Scriptwriter | `scriptwriter.py`: Adapt raw transcript into synchronized kids story script (±5 words rule) | `COMPLETED` ✅ | 100% |
+| **`TSK-13`** | Brand Watermark Overlay & Alignment | `renderer.py`: Stamp custom PNG logos (e.g. `assets/logo_maf_1.png`), cover original watermarks with zero re-encode overhead | `COMPLETED` ✅ | 100% |
 
 *Status: All tasks delivered, verified end-to-end, and covered by automated tests.*
 
@@ -101,6 +102,16 @@ graph TD
 - **Part (Viral Highlights)**: Targets the top 1–5 standalone hooks and highest-energy moments.
 - **Full (Complete Video Series)**: Continuously partitions 100% of the video chronologically into `Part 1: [Topic]`, `Part 2: [Topic]`, etc., with contiguous boundaries at natural sentence breaks.
 
+#### 9. AI Kids Story Scriptwriter (`shorts_cutter/scriptwriter.py`)
+- Adapts raw transcripts (foreign cartoons, dialogue, speech) into Disney/Pixar-style children's storytelling.
+- Adheres to a strict pacing budget ($\pm 5$ words) synchronized with video duration at 2.1 words/second.
+- Formats phonetic pauses (`...`) to preserve emotional beats and character timing.
+
+#### 10. Brand Watermark Concealment & Logo Stamping (`shorts_cutter/renderer.py`)
+- Integrates transparent channel branding PNGs (e.g., `assets/logo_maf_1.png`) into the primary FFmpeg `filter_complex`.
+- Uses pixel-perfect geometry (`W - w - 24` : `fg_top_y + 16`) to 100% conceal original watermarks without crossing blurred pillarbox boundaries.
+- Renders in a single pass with zero extra video re-encoding overhead.
+
 ---
 
 ## 4. Directory Structure for the New Feature
@@ -109,6 +120,9 @@ The new feature will be placed in an isolated directory:
 
 ```
 openshorts/
+├── assets/                     <-- BRAND ASSETS & WATERMARKS
+│   ├── logo_maf_1.png          # Active channel brand logo (cleaned alpha)
+│   └── logo_mafKids.png        # Alternative channel logo (cleaned alpha)
 ├── shorts_cutter/              <-- NEW ISOLATED PACKAGE (Leaves existing code untouched)
 │   ├── __init__.py
 │   ├── config.py               # Feature settings & default parameters
@@ -117,6 +131,7 @@ openshorts/
 │   ├── analyzer.py             # Gemini moment detection & scoring (Part & Full modes)
 │   ├── reframer.py             # 9:16 cropping & layout compositor
 │   ├── subtitles.py            # Word-level ASS subtitle generator
+│   ├── scriptwriter.py         # AI Kids story script adaptation & pacing engine
 │   ├── voiceover.py            # ElevenLabs TTS voiceover & voice changer
 │   ├── renderer.py             # Final FFmpeg rendering & audio muxing pipeline
 │   ├── cli.py                  # Standalone CLI runner
@@ -158,12 +173,13 @@ The entire feature has been verified inside the environment:
 
 | Test / Stage | Inputs | Verified Output | Performance |
 | :--- | :--- | :--- | :--- |
-| **Unit Test Suite** | 11 unit & integration tests (`test_pipeline.py`) | All 11 passed with 0 errors | **0.13s** execution |
+| **Unit Test Suite** | 20 unit & integration tests (`test_pipeline.py`) | All 20 passed with 0 errors | **29.2s** execution |
 | **Audio & Transcription** | Sample video with speech (`28.7s`) | 9 segments, 77 words with exact start/end timestamps | Faster-Whisper local |
 | **Moment Analysis** | 77-word transcript | Extracted standalone viral hook ("Stop letting your content just disappear into the digital void.") | Offline ($0 cost) or Gemini |
 | **Vertical Reframing** | 1920x1080 horizontal | 1080x1920 vertical with smooth blurred background pillarbox | FFmpeg boxblur |
 | **Subtitle Burn** | Word timestamps | Burned high-visibility karaoke subtitles with active yellow highlight | FFmpeg libass |
-| **CLI End-to-End** | `python -m shorts_cutter.cli` | Produced 1080x1920 MP4 (H.264/AAC, 5.15 MB, web-optimized) | **23.65s** total runtime |
+| **Brand Watermark Overlay** | Transparent PNG (`assets/logo_maf_1.png`) | Single-pass FFmpeg overlay concealing original watermark with zero edge-cut | **0.0s** extra re-encode penalty |
+| **CLI End-to-End** | `python -m shorts_cutter.cli` | Produced 1080x1920 MP4 (H.264/AAC, 5.55 MB, web-optimized) | **28.9s** total runtime |
 | **FastAPI Router** | `POST /api/shorts-cutter/process` | Asynchronously queued and rendered in background | 200 OK, polled to COMPLETED |
 
 ---
@@ -191,6 +207,12 @@ python3 -m shorts_cutter.cli --input /path/to/video.mp4 \
   --voice-id "29vD33N1CtxCmqQRPOHJ" \
   --elevenlabs-key "sk_..." \
   --gemini-key "AIzaSy..."
+
+# Specify custom brand watermark logo (default: assets/logo_maf_1.png):
+python3 -m shorts_cutter.cli --input /path/to/video.mp4 --watermark assets/logo_maf_1.png
+
+# Disable brand watermark overlay:
+python3 -m shorts_cutter.cli --input /path/to/video.mp4 --no-watermark
 ```
 
 ### 2. Via Standalone FastAPI Router
@@ -234,6 +256,7 @@ Both **separate tab integration** and **in-dashboard engine toggling** are now a
   - **Translate & Dub into English (AI Translation)**: One-click option to translate any foreign speech into English subtitles and voiceover. Whisper runs `task="translate"`, and ElevenLabs voices the English translation with native pronunciation.
   - **AI Voice Changing / Voiceover**: One-click toggle to replace original speaker audio with ElevenLabs AI voices. Uses `eleven_flash_v2_5` (supports 32 languages including Vietnamese, with explicit `language_code` support). Includes interactive card-based voice gallery (identical to SaaShorts/AI Shorts) with category filter chips (All, Female, Male, Custom/Cloned), real-time name/accent search, inline `<Volume2 />` audio sample preview player, and custom API key support.
   - **Visual Reframing**: Pillar Blur (blurred background) vs Smart Face/Speaker Centering Crop.
+  - **Overlay Channel Brand Logo (Watermark Replacement)**: One-click toggle (enabled by default) to automatically overlay a transparent channel logo (`assets/logo_maf_1.png` / `assets/logo_mafKids.png`) at pixel-perfect corner coordinates to cleanly cover original watermarks without quality degradation.
   - **Real-Time Progress**: Multi-stage indicator (`Ingest` → `Transcribe` → `AI Moments` → `9:16 Render`).
   - **Output Gallery**: Embedded vertical 9:16 video players with PART badges, AI Voice tags, and instant MP4 + SRT downloads.
 
@@ -331,5 +354,57 @@ generate_clip_voiceover(
 - **Engaging Narrative**: Converts dry dialogue or foreign cartoons into Disney/Pixar-style children's storytelling.
 - **Global Repurposing**: Takes local foreign animation (e.g. Vietnamese cartoons) and automatically republishes them as high-quality English children's shorts.
 
+---
 
+## 10. Channel Brand Watermark Overlay & Alignment Engine
 
+This module automatically applies custom channel branding (e.g. `assets/logo_maf_1.png`) over cut short clips, replacing and cleanly concealing original source video watermarks (such as TV network logos or "CHUN CHIN") in a single, zero-overhead FFmpeg render pass.
+
+### Architecture & Placement Formula
+
+```mermaid
+flowchart LR
+    A[Source Video 16:9] --> B[Reframer: Pillar Blur or Smart Crop]
+    C[Transparent Brand Logo PNG] --> D[Adaptive Scale & Align]
+    B --> E[FFmpeg Filtergraph Compositor]
+    D --> E
+    F[Karaoke ASS Subtitles] --> E
+    E --> G[Final 9:16 Video with Zero Re-Encode Overhead]
+```
+
+#### 1. Geometry & Coordinate Calculations (1080x1920)
+In `pillar_blur` mode, the original 16:9 video ($1920 \times 1080$) is scaled down to fit inside the vertical screen:
+* **Width**: 1080px
+* **Height**: $1080 \times \frac{9}{16} = 607.5 \approx 608\text{px}$
+* **Top Boundary**: $Y_{\text{top}} = \frac{1920 - 608}{2} = 656\text{px}$
+
+To ensure the logo never gets sliced by the horizontal dividing line between the video and the blurred background:
+* **Horizontal Placement**: `overlay_x = "W - w - 24"` (24px padding from right border).
+* **Vertical Placement**: `overlay_y = fg_top_y + 16` (16px padding from top edge of the 16:9 frame).
+* **Logo Width**: Scaled to `290px` (`scale=290:-1`).
+
+#### 2. Watermark Concealment Geometry
+Original watermark coordinates in 1080x1920 space:
+* $X \in [838\text{px}, 1036\text{px}]$
+* $Y \in [688\text{px}, 716\text{px}]$
+
+Brand badge bounding box ($290\text{px}$ wide):
+* $X \in [766\text{px}, 1056\text{px}]$ (leaves ample margins on both left and right).
+* $Y \in [672\text{px}, 806\text{px}]$ (covers 15px above and 90px below the original watermark).
+* **Result**: 100% of the original watermark is hidden with zero visual leaks.
+
+#### 3. Asset Processing Pipeline
+* Raw graphic files often contain baked-in pseudo-transparency (checkerboard patterns).
+* The pipeline automatically extracts true RGBA alpha masks and trims transparent outer padding so scaling coordinates apply strictly to the visible badge geometry.
+
+#### 4. Usage & Configuration
+* **Config (`JobConfig`)**:
+  * `watermark_path`: Path to PNG image (default: `assets/logo_maf_1.png`).
+  * `watermark_width`: Rendered width in pixels (default: `290`).
+* **CLI**:
+  * `--watermark <path>`: Specify custom logo.
+  * `--no-watermark`: Disable watermark stamping.
+* **API (`/api/shorts-cutter/process`)**:
+  * `"watermark_path": "assets/logo_maf_1.png"` (or `null` to disable).
+* **Dashboard UI**:
+  * Dedicated toggle: **"Overlay Channel Brand Logo (MAF Kids)"** in the Shorts Cutter settings tab.

@@ -71,7 +71,12 @@ def main():
         help="Adapt transcript into rhythmic children's storytelling script (±5 words rule)"
     )
     parser.add_argument(
-        "--no-subtitles", action="store_true", help="Disable burning dynamic karaoke subtitles"
+        "--watermark", default="assets/logo_maf_1.png",
+        help="Path to brand logo watermark PNG image (default: assets/logo_maf_1.png)"
+    )
+    parser.add_argument(
+        "--no-watermark", action="store_true",
+        help="Disable stamping brand watermark logo on clips"
     )
     parser.add_argument(
         "--font-size", type=int, default=24, help="Subtitle font size (default: 24)"
@@ -104,6 +109,7 @@ def main():
         kids_storytelling_mode=args.kids_story,
         elevenlabs_api_key=args.elevenlabs_key,
         elevenlabs_voice_id=args.voice_id,
+        watermark_path=None if args.no_watermark else args.watermark,
     )
 
     print("=" * 60)

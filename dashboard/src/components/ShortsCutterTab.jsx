@@ -41,6 +41,7 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
   const [language, setLanguage] = useState('auto'); // 'auto' | 'en' | 'es' | 'fr' | etc.
   const [translateToEnglish, setTranslateToEnglish] = useState(false);
   const [kidsStorytellingMode, setKidsStorytellingMode] = useState(false);
+  const [overlayLogo, setOverlayLogo] = useState(true);
   const [customGeminiKey, setCustomGeminiKey] = useState(geminiApiKey || '');
 
   // ElevenLabs Voiceover Settings
@@ -254,6 +255,7 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
           language: language !== 'auto' ? language : null,
           translate_to_english: translateToEnglish,
           kids_storytelling_mode: kidsStorytellingMode,
+          watermark_path: overlayLogo ? 'assets/logo_maf_1.png' : null,
           elevenlabs_voice_id: enableVoiceover ? selectedVoiceId : null,
         }),
       });
@@ -786,6 +788,30 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
                   type="checkbox"
                   checked={kidsStorytellingMode}
                   onChange={(e) => setKidsStorytellingMode(e.target.checked)}
+                  className="w-4 h-4 rounded text-accent focus:ring-accent accent-[#e5a93c]"
+                />
+              </label>
+
+              {/* Brand Watermark / Logo Overlay Toggle */}
+              <label className="flex items-center justify-between p-3 rounded-input bg-paper border border-rule cursor-pointer hover:border-accent/40 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-base">🦁 🏷️</span>
+                  <div>
+                    <span className="text-sm font-medium text-ink flex items-center gap-2">
+                      Overlay Channel Brand Logo (MAF Kids)
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold">
+                        CLEAN WATERMARK
+                      </span>
+                    </span>
+                    <span className="text-xs text-muted block">
+                      Stamps transparent MAF Kids cloud logo on top-right to neatly cover original video watermarks.
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={overlayLogo}
+                  onChange={(e) => setOverlayLogo(e.target.checked)}
                   className="w-4 h-4 rounded text-accent focus:ring-accent accent-[#e5a93c]"
                 />
               </label>

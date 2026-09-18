@@ -36,6 +36,7 @@ class ProcessRequest(BaseModel):
     translate_to_english: bool = Field(default=False, description="Translate foreign speech into English subtitles & voiceover")
     kids_storytelling_mode: bool = Field(default=False, description="Adapt transcript into rhythmic kids storytelling script (±5 words rule)")
     elevenlabs_voice_id: Optional[str] = Field(default=None, description="Optional ElevenLabs voice ID to replace audio")
+    watermark_path: Optional[str] = Field(default="assets/logo_maf_1.png", description="Optional watermark logo image path")
 
 
 def _run_background_job(job_id: str, config: JobConfig):
@@ -113,6 +114,7 @@ async def start_shorts_job(
         kids_storytelling_mode=req.kids_storytelling_mode,
         elevenlabs_api_key=x_elevenlabs_key or os.environ.get("ELEVENLABS_API_KEY"),
         elevenlabs_voice_id=req.elevenlabs_voice_id,
+        watermark_path=req.watermark_path,
     )
 
     JOBS_STORE[job_id] = {

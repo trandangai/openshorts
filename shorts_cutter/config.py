@@ -111,6 +111,8 @@ class JobConfig:
     kids_storytelling_mode: bool = False  # True = adapt transcript into rhythmic kids storytelling script (±5 words rule)
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None  # None = keep original audio, or specify voice_id to dub/voiceover
+    watermark_path: Optional[str] = "assets/logo_maf_1.png"  # Path to channel logo / watermark (None to disable)
+    watermark_width: int = 290  # Rendered pixel width of the watermark logo
 
     def __post_init__(self):
         if not self.gemini_api_key:
