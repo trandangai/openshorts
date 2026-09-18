@@ -98,7 +98,7 @@ class JobConfig:
     max_clip_duration: float = 60.0
     whisper_model_size: str = "base"
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = os.environ.get("GEMINI_MODEL") or "gemini-3.1-flash"
     reframing_mode: ReframingMode = ReframingMode.PILLAR_BLUR
     target_width: int = 1080
     target_height: int = 1920
@@ -108,6 +108,7 @@ class JobConfig:
     coverage_mode: str = "part"  # "part" (highlights) or "full" (sequential full video series)
     language: Optional[str] = None  # None / "auto" = auto-detect, or ISO-639-1 code (e.g. "en", "es", "vi", "fr")
     translate_to_english: bool = False  # True = translate foreign audio to English subtitles & voiceover
+    kids_storytelling_mode: bool = False  # True = adapt transcript into rhythmic kids storytelling script (±5 words rule)
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None  # None = keep original audio, or specify voice_id to dub/voiceover
 

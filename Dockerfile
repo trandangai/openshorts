@@ -14,7 +14,7 @@ COPY requirements.txt requirements-billing.txt ./
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 # Cloud (paid mode) deps: installed always so one image serves both modes; they
 # are only imported when BILLING_ENABLED is set. Harmless/unused in self-host.
 RUN pip install --no-cache-dir -r requirements-billing.txt
@@ -80,8 +80,11 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
 # Latest yt-dlp (nightly — it updates frequently) plus its helper plugin.
 RUN pip install --upgrade --pre --no-cache-dir "yt-dlp[default]" bgutil-ytdlp-pot-provider
 
-# Copy application code
-COPY . .
+# Create a non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
+# Copy application code with non-root ownership directly
+COPY --chown=appuser:appuser . .
 
 # Register the bundled fonts (Anton for Impact) and the UI-name -> real-font
 # aliases with fontconfig so libass resolves what the subtitle modal offers.
@@ -90,15 +93,10 @@ RUN mkdir -p /usr/local/share/fonts/openshorts \
     && cp fonts/openshorts-fontmap.conf /etc/fonts/conf.d/60-openshorts.conf \
     && fc-cache -f
 
-# Create a non-root user (Moved up)
-RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
-
-# Create directories including Ultralytics cache config. /app/.cache/huggingface
-# exists in-image (appuser-owned via the chown below) so a persistent volume
-# mounted there inherits writable ownership for the ASR model downloads.
-RUN mkdir -p /app/uploads /app/output /app/.cache/huggingface /tmp/Ultralytics
-# Fix permissions: /app for code/uploads, /tmp/Ultralytics for AI cache
-RUN chown -R appuser:appuser /app /tmp/Ultralytics
+# Create runtime directories including Ultralytics cache config. /app/.cache/huggingface
+# exists in-image (appuser-owned) so a persistent volume mounted there inherits writable ownership.
+RUN mkdir -p /app/uploads /app/output /app/.cache/huggingface /tmp/Ultralytics \
+    && chown -R appuser:appuser /app /tmp/Ultralytics
 
 # Pre-download YOLO model on build. Stored in /opt/models so host volume mounts (e.g. .:/app)
 # don't shadow the weights, and downloaded via curl -fSL because python urllib is often

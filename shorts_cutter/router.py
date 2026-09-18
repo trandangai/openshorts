@@ -31,9 +31,10 @@ class ProcessRequest(BaseModel):
     coverage_mode: str = Field(default="part", description="'part' (viral highlights) or 'full' (sequential full video series)")
     burn_subtitles: bool = Field(default=True, description="Burn word-highlighted subtitles")
     whisper_model_size: str = Field(default="base", description="faster-whisper model: tiny, base, small")
-    gemini_model: str = Field(default="gemini-2.0-flash")
+    gemini_model: str = Field(default=os.environ.get("GEMINI_MODEL") or "gemini-3.1-flash")
     language: Optional[str] = Field(default=None, description="Spoken language code (e.g. 'en', 'es', 'fr', 'vi', 'auto')")
     translate_to_english: bool = Field(default=False, description="Translate foreign speech into English subtitles & voiceover")
+    kids_storytelling_mode: bool = Field(default=False, description="Adapt transcript into rhythmic kids storytelling script (±5 words rule)")
     elevenlabs_voice_id: Optional[str] = Field(default=None, description="Optional ElevenLabs voice ID to replace audio")
 
 
@@ -109,6 +110,7 @@ async def start_shorts_job(
         coverage_mode=req.coverage_mode,
         language=req.language,
         translate_to_english=req.translate_to_english,
+        kids_storytelling_mode=req.kids_storytelling_mode,
         elevenlabs_api_key=x_elevenlabs_key or os.environ.get("ELEVENLABS_API_KEY"),
         elevenlabs_voice_id=req.elevenlabs_voice_id,
     )

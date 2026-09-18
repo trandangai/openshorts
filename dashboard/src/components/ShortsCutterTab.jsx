@@ -40,6 +40,7 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
   const [whisperModel, setWhisperModel] = useState('base');
   const [language, setLanguage] = useState('auto'); // 'auto' | 'en' | 'es' | 'fr' | etc.
   const [translateToEnglish, setTranslateToEnglish] = useState(false);
+  const [kidsStorytellingMode, setKidsStorytellingMode] = useState(false);
   const [customGeminiKey, setCustomGeminiKey] = useState(geminiApiKey || '');
 
   // ElevenLabs Voiceover Settings
@@ -252,6 +253,7 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
           whisper_model_size: whisperModel,
           language: language !== 'auto' ? language : null,
           translate_to_english: translateToEnglish,
+          kids_storytelling_mode: kidsStorytellingMode,
           elevenlabs_voice_id: enableVoiceover ? selectedVoiceId : null,
         }),
       });
@@ -764,6 +766,30 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
                 />
               </label>
 
+              {/* Kids Story Scriptwriter Adaptation Toggle */}
+              <label className="flex items-center justify-between p-3 rounded-input bg-paper border border-rule cursor-pointer hover:border-accent/40 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-base">✨ 📖</span>
+                  <div>
+                    <span className="text-sm font-medium text-ink flex items-center gap-2">
+                      Kids Animated Story Scriptwriter
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent/20 text-accent font-semibold">
+                        ±5 WORDS RULE
+                      </span>
+                    </span>
+                    <span className="text-xs text-muted block">
+                      Adapts raw transcript into a whimsical, engaging story script (Disney/Pixar style) strictly rhythm-synchronized to animation cuts.
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={kidsStorytellingMode}
+                  onChange={(e) => setKidsStorytellingMode(e.target.checked)}
+                  className="w-4 h-4 rounded text-accent focus:ring-accent accent-[#e5a93c]"
+                />
+              </label>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-mono uppercase tracking-wider text-muted">
                   Google Gemini API Key (Optional — Leave empty for $0 offline heuristic)
@@ -799,10 +825,18 @@ export default function ShortsCutterTab({ geminiApiKey = '', elevenLabsApiKey = 
                     <Globe size={16} className="text-accent shrink-0 mt-0.5" />
                     <div className="text-xs text-ink leading-relaxed">
                       <div className="font-medium text-accent flex items-center gap-1.5 mb-0.5">
-                        {translateToEnglish ? '🇬🇧 English Translation & Dubbing Active' : '🌐 Multilingual AI Voice Model (32 Languages)'}
+                        {kidsStorytellingMode
+                          ? '✨ Kids Animated Story Scriptwriter Active (±5 Words Rule)'
+                          : translateToEnglish
+                          ? '🇬🇧 English Translation & Dubbing Active'
+                          : '🌐 Multilingual AI Voice Model (32 Languages)'}
                       </div>
                       <p className="text-muted text-[11px]">
-                        {translateToEnglish ? (
+                        {kidsStorytellingMode ? (
+                          <>
+                            The transcript is adapted into an enchanting children's story script (Disney/Pixar style) strictly adhering to the <strong className="text-ink">±5 words rule</strong>. The chosen voice will narrate the story script with perfect animated cadence.
+                          </>
+                        ) : translateToEnglish ? (
                           <>
                             Whisper will automatically translate foreign speech into <strong className="text-ink">English text & subtitles</strong>. Your selected ElevenLabs voice will speak the <strong className="text-ink">English translation</strong> with natural pronunciation.
                           </>

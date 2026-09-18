@@ -40,7 +40,7 @@ def main():
         "--gemini-key", default=None, help="Google Gemini API Key (optional, defaults to env or offline heuristic)"
     )
     parser.add_argument(
-        "--gemini-model", default="gemini-2.0-flash", help="Gemini model identifier (default: gemini-2.0-flash)"
+        "--gemini-model", default=os.environ.get("GEMINI_MODEL") or "gemini-3.1-flash", help="Gemini model identifier (default: gemini-3.1-flash)"
     )
     parser.add_argument(
         "--mode", choices=["pillar_blur", "smart_crop"], default="pillar_blur",
@@ -65,6 +65,10 @@ def main():
     parser.add_argument(
         "--translate", action="store_true",
         help="Translate foreign language speech into English subtitles and voiceover"
+    )
+    parser.add_argument(
+        "--kids-story", action="store_true",
+        help="Adapt transcript into rhythmic children's storytelling script (±5 words rule)"
     )
     parser.add_argument(
         "--no-subtitles", action="store_true", help="Disable burning dynamic karaoke subtitles"
@@ -97,6 +101,7 @@ def main():
         coverage_mode=args.coverage,
         language=args.language,
         translate_to_english=args.translate,
+        kids_storytelling_mode=args.kids_story,
         elevenlabs_api_key=args.elevenlabs_key,
         elevenlabs_voice_id=args.voice_id,
     )

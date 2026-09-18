@@ -78,6 +78,28 @@ def probe_video(video_path: str) -> Dict[str, Any]:
     }
 
 
+def probe_audio_duration(audio_path: str) -> float:
+    """
+    Run ffprobe on an audio or video file to extract exact duration in seconds.
+    """
+    if not audio_path or not os.path.exists(audio_path):
+        return 0.0
+
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        audio_path,
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return float(res.stdout.strip() or 0.0)
+    except Exception as e:
+        print(f"[shorts_cutter:ingest] Warning probing audio duration: {e}")
+        return 0.0
+
+
 def download_youtube_video(url: str, output_dir: str) -> str:
     """
     Download a video from YouTube (or any supported URL) using yt-dlp.

@@ -183,7 +183,7 @@ def _heuristic_analyze_moments(
 def analyze_viral_moments(
     transcript: Transcript,
     gemini_api_key: Optional[str] = None,
-    gemini_model: str = "gemini-2.0-flash",
+    gemini_model: str = "gemini-3.1-flash",
     max_clips: int = 3,
     min_duration: float = 15.0,
     max_duration: float = 60.0,
@@ -199,8 +199,14 @@ def analyze_viral_moments(
 
     # If no Gemini API key, use the local heuristic analyzer
     if not gemini_api_key:
-        print(f"[shorts_cutter:analyzer] No Gemini API key provided. Using local heuristic moment analyzer (mode: {coverage_mode}, $0 cost).")
-        return _heuristic_analyze_moments(transcript, max_clips, min_duration, max_duration, coverage_mode=coverage_mode)
+        print("[shorts_cutter:analyzer] No Gemini API key provided. Using offline heuristic analyzer ($0).")
+        return _heuristic_analyze_moments(
+            transcript=transcript,
+            max_clips=max_clips,
+            min_duration=min_duration,
+            max_duration=max_duration,
+            coverage_mode=coverage_mode,
+        )
 
     # Format transcript with line timestamps for Gemini
     formatted_lines = []
@@ -265,16 +271,38 @@ TRANSCRIPT:
         from google import genai
         from google.genai import types
 
-        print(f"[shorts_cutter:analyzer] Querying {gemini_model} for viral moments (mode: {coverage_mode})...")
         client = genai.Client(api_key=gemini_api_key)
-        response = client.models.generate_content(
-            model=gemini_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.3,
-                response_mime_type="application/json",
-            ),
-        )
+        candidate_models = [gemini_model]
+        for alt in ["gemini-3.1-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]:
+            if alt not in candidate_models:
+                candidate_models.append(alt)
+
+        response = None
+        last_error = None
+        for model_cand in candidate_models:
+            try:
+                print(f"[shorts_cutter:analyzer] Querying {model_cand} for viral moments (mode: {coverage_mode})...")
+                response = client.models.generate_content(
+                    model=model_cand,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,
+                        response_mime_type="application/json",
+                    ),
+                )
+                if response:
+                    break
+            except Exception as me:
+                last_error = me
+                err_msg = str(me).lower()
+                if "404" in err_msg or "not_found" in err_msg or "not found" in err_msg:
+                    print(f"[shorts_cutter:analyzer] Model {model_cand} returned 404 (not found). Trying fallback candidate...")
+                    continue
+                else:
+                    raise me
+
+        if not response and last_error:
+            raise last_error
 
         data = _extract_json(getattr(response, "text", ""))
         if data and isinstance(data, list):

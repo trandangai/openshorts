@@ -21,11 +21,28 @@ remotion/node_modules/
 render-service/node_modules/
 dashboard/node_modules/
 
-# IDE
+# IDE & OS
 .idea/
 .vscode/
 *.swp
 *.swo
+.DS_Store
+Thumbs.db
+
+# Cache & Runtime directories (mounted via volume)
+.cache/
+.config/
+output/
+uploads/
+downloads/
+temp_*
+
+# Multi-agent
+.agents/
+.agent/
+.claude/
+.hallmark/
+.codegraph/
 
 # Video files (will be mounted via volume)
 *.mp4
@@ -33,6 +50,7 @@ dashboard/node_modules/
 *.mov
 *.mkv
 *.gif
+*.webm
 videos/
 
 # Model files (downloaded at build time)
@@ -49,12 +67,14 @@ videos/
 
 # Docker
 Dockerfile
-docker-compose.yml
+Dockerfile*
+docker-compose*.yml
 .dockerignore
 
 # Docs
 README.md
 *.md
+
 
 
 

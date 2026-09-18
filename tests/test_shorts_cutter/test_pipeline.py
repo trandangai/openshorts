@@ -271,6 +271,70 @@ class TestShortsCutter(unittest.TestCase):
         self.assertIn("voices", data)
         self.assertGreaterEqual(len(data["voices"]), 6)
 
+    def test_scriptwriter_word_counting_and_boundary(self):
+        from shorts_cutter.scriptwriter import _count_words, _enforce_word_boundary
+
+        text = "Hello world this is a test script for children storytelling"
+        count = _count_words(text)
+        self.assertEqual(count, 10)
+
+        # ±5 boundary enforcement on 10 words: min 5, max 15
+        long_text = "One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen"
+        bounded = _enforce_word_boundary(long_text, original_count=10, tolerance=5)
+        self.assertLessEqual(_count_words(bounded), 15)
+
+    def test_scriptwriter_fallback_adaptation(self):
+        from shorts_cutter.scriptwriter import adapt_kids_story_script
+
+        raw_transcript = "Little cat did not want to go to school because of tail"
+        orig_count = len(raw_transcript.split())
+        res = adapt_kids_story_script(
+            raw_transcript=raw_transcript,
+            clip_duration=15.0,
+            gemini_api_key=None,  # Offline test
+        )
+        self.assertIn("timing_metadata", res)
+        self.assertIn("final_script_text", res)
+        meta = res["timing_metadata"]
+        self.assertEqual(meta["original_word_count"], orig_count)
+        self.assertEqual(meta["min_allowed_words"], orig_count - 5)
+        self.assertEqual(meta["max_allowed_words"], orig_count + 5)
+
+    def test_align_text_to_duration(self):
+        from shorts_cutter.subtitles import align_text_to_duration
+
+        text = "Look at the little sheep hopping down the road"
+        aligned = align_text_to_duration(text, duration=10.0)
+        self.assertEqual(len(aligned), 9)
+        self.assertEqual(aligned[0].start, 0.0)
+        self.assertLessEqual(aligned[-1].end, 10.0)
+
+    def test_config_kids_storytelling_mode(self):
+        cfg = JobConfig(source_input="test.mp4")
+        self.assertFalse(cfg.kids_storytelling_mode)
+
+        cfg_kids = JobConfig(source_input="test.mp4", kids_storytelling_mode=True)
+        self.assertTrue(cfg_kids.kids_storytelling_mode)
+
+
+    def test_rescale_words_to_duration(self):
+        from shorts_cutter.subtitles import rescale_words_to_duration
+
+        words = [
+            WordTimestamp(word="One", start=0.0, end=2.0, probability=1.0),
+            WordTimestamp(word="Two", start=2.0, end=4.0, probability=1.0),
+            WordTimestamp(word="Three", start=4.0, end=8.0, probability=1.0),
+        ]
+        # Rescale from 8.0s down to 4.0s (e.g. faster ElevenLabs voiceover)
+        rescaled = rescale_words_to_duration(words, target_duration=4.0)
+        self.assertEqual(len(rescaled), 3)
+        self.assertEqual(rescaled[0].start, 0.0)
+        self.assertEqual(rescaled[0].end, 1.0)
+        self.assertEqual(rescaled[1].start, 1.0)
+        self.assertEqual(rescaled[1].end, 2.0)
+        self.assertEqual(rescaled[2].start, 2.0)
+        self.assertEqual(rescaled[2].end, 4.0)
+
 
 if __name__ == "__main__":
     unittest.main()

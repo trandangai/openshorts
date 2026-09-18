@@ -71,10 +71,11 @@ def generate_ass_subtitles(
     primary_color: str = "&H00FFFFFF",      # White in BGR
     highlight_color: str = "&H0000D4FF",    # Bright Yellow/Gold in BGR (&HAABBGGRR)
     outline_color: str = "&H00000000",      # Black outline
-    words_per_group: int = 3,
+    words_per_group: int = 5,
 ) -> str:
     """
     Generate styled ASS file with dynamic word highlighting (karaoke style).
+    Groups words into readable 5-word phrases and highlights active words seamlessly.
     """
     os.makedirs(os.path.dirname(os.path.abspath(output_ass_path)), exist_ok=True)
 
@@ -98,19 +99,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             f.write(header)
         return output_ass_path
 
-    # Group words into small chunks (e.g. 2-4 words) for punchy TikTok readability
+    # Group words into 5-word chunks for optimal mobile/vertical readability
     groups = []
     for i in range(0, len(words), words_per_group):
         groups.append(words[i : i + words_per_group])
 
     for grp in groups:
-        grp_start = grp[0].start
-        grp_end = grp[-1].end
-
         # For each word in the group, create an event where that word is highlighted
         for target_idx, active_word in enumerate(grp):
             word_start = active_word.start
-            word_end = active_word.end
+            # Smooth transition to next word so phrase remains visible without flickering
+            if target_idx + 1 < len(grp):
+                word_end = max(active_word.end, grp[target_idx + 1].start)
+            else:
+                word_end = active_word.end
 
             # Build line text where active word has highlight_color
             tokens = []
@@ -139,7 +141,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 def generate_srt_subtitles(
     words: List[WordTimestamp],
     output_srt_path: str,
-    words_per_group: int = 4,
+    words_per_group: int = 5,
 ) -> str:
     """Generate standard SRT subtitle file."""
     os.makedirs(os.path.dirname(os.path.abspath(output_srt_path)), exist_ok=True)
@@ -161,3 +163,54 @@ def generate_srt_subtitles(
         f.write("\n".join(lines))
 
     return output_srt_path
+
+
+def align_text_to_duration(text: str, duration: float) -> List[WordTimestamp]:
+    """
+    Distribute words across a given duration proportionally.
+    Useful for adapted storytelling scripts when synthesizing new voiceover.
+    """
+    words = [w.strip() for w in text.split() if w.strip()]
+    if not words or duration <= 0:
+        return []
+    time_per_word = duration / len(words)
+    aligned = []
+    for i, w in enumerate(words):
+        start = round(i * time_per_word, 3)
+        end = round(min(duration, (i + 1) * time_per_word), 3)
+        aligned.append(WordTimestamp(word=w, start=start, end=end, probability=1.0))
+    return aligned
+
+
+def rescale_words_to_duration(
+    words: List[WordTimestamp],
+    target_duration: float,
+) -> List[WordTimestamp]:
+    """
+    Linearly rescale word timestamps so that the speech sequence aligns exactly
+    with the target audio duration (e.g. from synthesized ElevenLabs voiceover).
+    """
+    if not words or target_duration <= 0:
+        return words
+
+    current_end = max(w.end for w in words)
+    if current_end <= 0:
+        return words
+
+    scale_factor = target_duration / current_end
+    rescaled = []
+    for w in words:
+        new_start = round(w.start * scale_factor, 3)
+        new_end = round(w.end * scale_factor, 3)
+        if new_end <= new_start:
+            new_end = round(new_start + 0.05, 3)
+        rescaled.append(
+            WordTimestamp(
+                word=w.word,
+                start=new_start,
+                end=new_end,
+                probability=w.probability,
+            )
+        )
+    return rescaled
+

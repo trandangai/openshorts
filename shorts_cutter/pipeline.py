@@ -9,10 +9,15 @@ import time
 import uuid
 from typing import Dict, Any, Optional, List
 from shorts_cutter.config import JobConfig, ReframingMode, ViralMoment
-from shorts_cutter.ingest import ingest_media
+from shorts_cutter.ingest import ingest_media, probe_audio_duration
 from shorts_cutter.transcriber import transcribe_video
 from shorts_cutter.analyzer import analyze_viral_moments
-from shorts_cutter.subtitles import extract_clip_words, generate_ass_subtitles, generate_srt_subtitles
+from shorts_cutter.subtitles import (
+    extract_clip_words,
+    generate_ass_subtitles,
+    generate_srt_subtitles,
+    rescale_words_to_duration,
+)
 from shorts_cutter.renderer import render_clip
 from shorts_cutter.voiceover import generate_clip_voiceover
 
@@ -114,38 +119,68 @@ def run_pipeline(config: JobConfig, progress_callback: Optional[callable] = None
             ass_path = None
             srt_path = None
             clip_words = extract_clip_words(transcript, m.start, m.end)
+            raw_clip_text = " ".join(w.word for w in clip_words).strip()
 
-            if config.burn_subtitles:
-                ass_path = os.path.join(clips_dir, f"clip_{m.id}.ass")
-                srt_path = os.path.join(clips_dir, f"clip_{m.id}.srt")
-                generate_ass_subtitles(
-                    words=clip_words,
-                    output_ass_path=ass_path,
-                    font_size=config.subtitles_font_size,
-                    highlight_color=config.subtitles_highlight_color,
-                )
-                generate_srt_subtitles(words=clip_words, output_srt_path=srt_path)
+            # Optional AI Voice Scriptwriter & Storytelling Adaptation
+            story_script_meta = None
+            active_script_words = clip_words
+            active_clip_text = raw_clip_text
+
+            if config.kids_storytelling_mode and raw_clip_text:
+                try:
+                    update_progress("SCRIPTWRITER", progress_pct, f"Adapting kids storytelling script for Short #{m.id} (±5 words rule)...")
+                    from shorts_cutter.scriptwriter import adapt_kids_story_script
+                    from shorts_cutter.subtitles import align_text_to_duration
+                    script_data = adapt_kids_story_script(
+                        raw_transcript=raw_clip_text,
+                        clip_duration=m.duration,
+                        clip_words=clip_words,
+                        source_lang=transcript.language,
+                        gemini_api_key=config.gemini_api_key,
+                        gemini_model=config.gemini_model,
+                    )
+                    story_script_meta = script_data
+                    active_clip_text = script_data.get("final_script_text", raw_clip_text)
+                    active_script_words = align_text_to_duration(active_clip_text, m.duration)
+                except Exception as se:
+                    print(f"[shorts_cutter:pipeline] Story script adaptation warning: {se}. Using raw transcript.")
 
             # Optional ElevenLabs Voiceover / Voice Changing
             audio_override_path = None
             if config.elevenlabs_voice_id and config.elevenlabs_api_key:
-                clip_text = " ".join(w.word for w in clip_words).strip()
-                if clip_text:
+                if active_clip_text:
                     try:
                         update_progress("VOICEOVER", progress_pct, f"Synthesizing ElevenLabs voice for Short #{m.id}...")
                         voice_out = os.path.join(clips_dir, f"voiceover_{m.id}.mp3")
-                        target_lang = "en" if config.translate_to_english else (config.language if config.language and config.language.lower() != "auto" else transcript.language)
+                        target_lang = "en" if (config.translate_to_english or config.kids_storytelling_mode) else (config.language if config.language and config.language.lower() != "auto" else transcript.language)
                         generate_clip_voiceover(
-                            text=clip_text,
+                            text=active_clip_text,
                             api_key=config.elevenlabs_api_key,
                             output_path=voice_out,
                             voice_id=config.elevenlabs_voice_id,
                             language_code=target_lang,
                         )
                         audio_override_path = voice_out
+
+                        # Rescale subtitle word timestamps to match ElevenLabs audio duration perfectly
+                        voice_duration = probe_audio_duration(voice_out)
+                        if voice_duration > 0:
+                            active_script_words = rescale_words_to_duration(active_script_words, voice_duration)
                     except Exception as ve:
                         print(f"[shorts_cutter:pipeline] ElevenLabs voiceover warning: {ve}. Falling back to original audio.")
                         audio_override_path = None
+
+            if config.burn_subtitles:
+                ass_path = os.path.join(clips_dir, f"clip_{m.id}.ass")
+                srt_path = os.path.join(clips_dir, f"clip_{m.id}.srt")
+                generate_ass_subtitles(
+                    words=active_script_words,
+                    output_ass_path=ass_path,
+                    font_size=config.subtitles_font_size,
+                    highlight_color=config.subtitles_highlight_color,
+                    words_per_group=5,
+                )
+                generate_srt_subtitles(words=active_script_words, output_srt_path=srt_path, words_per_group=5)
 
             output_mp4 = os.path.join(clips_dir, f"clip_{m.id}.mp4")
             render_clip(
@@ -181,6 +216,8 @@ def run_pipeline(config: JobConfig, progress_callback: Optional[callable] = None
                 "voiceover_url": f"/api/shorts-cutter/jobs/{job_id}/files/{voice_fname}" if voice_fname else None,
                 "size_mb": round(os.path.getsize(output_mp4) / (1024 * 1024), 2),
             }
+            if story_script_meta:
+                clip_meta["story_script"] = story_script_meta
             rendered_clips.append(clip_meta)
 
         result["clips"] = rendered_clips

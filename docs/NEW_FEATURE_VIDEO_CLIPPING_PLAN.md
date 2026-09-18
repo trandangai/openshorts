@@ -25,8 +25,9 @@ The goal of this feature is to provide a dedicated, lightweight, and modular pip
 | **TSK-07** | Pipeline Orchestrator & CLI | `pipeline.py` / `cli.py`: Unified execution runner (`python -m shorts_cutter ...`) | `COMPLETED` ✅ | 100% |
 | **TSK-08** | Non-invasive API Router | Optional modular FastAPI router that can be registered without modifying app core | `COMPLETED` ✅ | 100% |
 | **TSK-09** | Testing & Quality Check | Automated test suite verifying end-to-end sample processing | `COMPLETED` ✅ | 100% |
-| **TSK-10** | Full Series vs Part Coverage | Sequential multi-part video series (`Part 1`, `Part 2`, ...) covering 100% of video | `COMPLETED` ✅ | 100% |
-| **TSK-11** | ElevenLabs AI Voice Changing | `voiceover.py`: Replace original speaker voice with ElevenLabs voices (presets or cloned) | `COMPLETED` ✅ | 100% |
+| **`TSK-10`** | Full Series vs Part Coverage | Sequential multi-part video series (`Part 1`, `Part 2`, ...) covering 100% of video | `COMPLETED` ✅ | 100% |
+| **`TSK-11`** | ElevenLabs AI Voice Changing | `voiceover.py`: Replace original speaker voice with ElevenLabs voices (presets or cloned) | `COMPLETED` ✅ | 100% |
+| **`TSK-12`** | AI Kids Story Scriptwriter | `scriptwriter.py`: Adapt raw transcript into synchronized kids story script (±5 words rule) | `COMPLETED` ✅ | 100% |
 
 *Status: All tasks delivered, verified end-to-end, and covered by automated tests.*
 
@@ -239,5 +240,96 @@ Both **separate tab integration** and **in-dashboard engine toggling** are now a
 ### 2. Quick Engine Switch / Toggle in Main Dashboard
 - **Location**: Top of [`dashboard/src/components/MediaInput.jsx`](file:///Users/aitd/Documents/Work/Freelance/openshorts/dashboard/src/components/MediaInput.jsx).
 - **Behavior**: Users working in the legacy `Clip Generator` can switch to `Shorts Cutter (v2)` with a single click on the quick switch banner (`Switch to Shorts Cutter v2 →`).
+
+---
+
+## 9. AI Voice Scriptwriter & Storytelling Adaptation Pipeline
+
+This section maps the **Shorts Cutter transcription pipeline** to the **AI Voice Scriptwriter & Storytelling Adaptation Prompt** for children's animated storytelling and rhythm-synchronized voiceover production.
+
+### Architecture Mapping Overview
+
+```mermaid
+flowchart TD
+    A["Raw Video / Animation\n(e.g., Vietnamese Cartoon)"] --> B["1. Audio Extraction (FFmpeg)\n16kHz Mono WAV"]
+    B --> C["2. faster-whisper\nWord-Level Timestamps [start, end]"]
+    C --> D["3. Clip Boundary Slicing\nClip Duration D = end - start (e.g. 20s)"]
+    D --> E["4. AI Voice Scriptwriter (Gemini LLM)\nApplies Speech-Rate Formula: D × 2.1 WPS\nRewrites into Children's Narrative English"]
+    E --> F["5. Adapted Synchronized Script\n- Timed blocks [00:00 - 00:XX]\n- Pauses & tone cues ([pause], whisper)"]
+    F --> G["6. ElevenLabs Voiceover (eleven_flash_v2_5)\nSynthesizes expressive voice matching duration"]
+    F --> H["7. Dynamic Karaoke Subtitles (.ass / .srt)\nBurns adapted script text onto 9:16 video"]
+    G --> I["8. FFmpeg Compositor\nFinal 9:16 Kids Animated Short"]
+    H --> I
+```
+
+### 1. Data Mapping Between Pipeline & Scriptwriter Prompt
+
+| Scriptwriter Prompt Field | Pipeline Source / Variable | Description |
+| :--- | :--- | :--- |
+| **`Total Clip Duration`** | `m.duration = m.end - m.start` | Exact duration of extracted short (e.g., `18.5s`). |
+| **`Source Language`** | `transcript.language` (e.g. `vi`, `en`) | Language detected by Whisper or selected by user. |
+| **`Target Audience Age`** | User parameter (Default: `5-8 years old`) | Directs tone, vocabulary simplicity, and whimsy. |
+| **`Raw Timestamped Transcript`** | `extract_clip_words(transcript, m.start, m.end)` | Block-by-block words and timecodes from Whisper. |
+| **`Speech-Rate Factor`** | Config (`2.1 words/sec` for English Kids) | Prevents TTS audio from rushing or trailing off. |
+| **`Target Word Budget`** | `Original_Count ± 5 words` | Strict target word count enforcing the ±5 words boundary. |
+
+### 2. Core Constraints & Speech-Rate Enforcement Formula
+
+#### A. Strict Word Count Constraint (±5 Words Rule)
+To ensure the custom script matches the pacing, animation cuts, and voice delivery of the source clip without rushing or dragging:
+1. **Baseline Measurement**:
+   - Count the exact total number of words in the source transcript: `Original_Count`.
+2. **Hard Boundary**:
+   - Target Total Words = `[Original_Count - 5] <= Custom_Script_Words <= [Original_Count + 5]`.
+   - The final English script **MUST NOT deviate by more than ±5 words** from the original baseline.
+3. **Timestamp Alignment**:
+   - When timestamps are provided, distribute the word count proportionally across each time block so individual cuts remain frame-accurate.
+
+#### B. Speech Budget Reference & Pacing Rules
+1. **Cadence Formula**:
+   - English (Children's Storytelling / Expressive Delivery): `2.0 to 2.3 words per second` (~120–138 WPM).
+   - Vietnamese (Natural Conversational / Storytelling): `2.2 to 2.5 words per second` (~130–150 WPM).
+   - $\text{Target Word Count} = \text{Segment Duration (in seconds)} \times 2.1 \text{ words/sec}$.
+2. **Pacing & Phonetic Rules**:
+   - Keep syntax short, rhythmic, and clear; avoid run-on sentences.
+   - Insert explicit phonetic pauses (`...` or `[pause]`) where natural breathing or animated scene transitions happen.
+   - Sensory-rich storytelling vocabulary (*whoosh*, *sparkle*, *tiptoe*) replaces dry literal dialogue while preserving 100% of character actions, emotional beats, and timeline events.
+
+### 3. Pipeline Integration Point
+
+In [`shorts_cutter/pipeline.py`](file:///Users/aitd/Documents/Work/Freelance/openshorts/shorts_cutter/pipeline.py), the adaptation step sits directly between **Transcription** and **Voiceover**:
+
+```python
+# 1. Extract raw words for current clip
+clip_words = extract_clip_words(transcript, m.start, m.end)
+raw_clip_text = " ".join(w.word for w in clip_words)
+
+# 2. Adapt transcript using AI Voice Scriptwriter Prompt (if kids storytelling mode enabled)
+if config.kids_storytelling_mode:
+    script_result = adapt_kids_story_script(
+        raw_transcript=raw_clip_text,
+        clip_duration=m.duration,
+        source_lang=transcript.language,
+        gemini_api_key=config.gemini_api_key,
+    )
+    final_voiceover_text = script_result["final_script_text"]
+else:
+    final_voiceover_text = raw_clip_text
+
+# 3. ElevenLabs synthesizes the adapted script
+generate_clip_voiceover(
+    text=final_voiceover_text,
+    api_key=config.elevenlabs_api_key,
+    output_path=voice_out,
+    voice_id=config.elevenlabs_voice_id,
+    language_code="en",
+)
+```
+
+### 4. Benefits of This Integration
+- **Zero Drift**: Eliminates the common problem where translated TTS is too long or too short for the video.
+- **Engaging Narrative**: Converts dry dialogue or foreign cartoons into Disney/Pixar-style children's storytelling.
+- **Global Repurposing**: Takes local foreign animation (e.g. Vietnamese cartoons) and automatically republishes them as high-quality English children's shorts.
+
 
 
